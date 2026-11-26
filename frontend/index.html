@@ -12,7 +12,12 @@
     <img src="/assets/logo.png" alt="AwaazAI logo" class="logo">
     <span class="brand-name">Awaaz<span>AI</span></span>
   </div>
-  <span class="pill" id="status-pill">Checking engine…</span>
+  <div class="top-right">
+    <span class="pill" id="credits-pill" title="Credits — login karein to 100 free credits milte hain">Credits: —</span>
+    <span class="pill" id="status-pill">Checking engine…</span>
+    <span class="pill hidden" id="user-pill"></span>
+    <button id="logout-btn" class="btn small hidden">Logout</button>
+  </div>
 </header>
 
 <main>
@@ -25,9 +30,34 @@
     </div>
   </section>
 
+  <section class="card" id="auth">
+    <h2>Account — login / signup</h2>
+    <p class="muted">Login karein to 100 free credits, history aur saved voices milte hain. Bina login ke bhi TTS demo try kar sakte hain — <span id="demo-left">5 demo generations</span> is browser session mein.</p>
+    <div id="auth-forms">
+      <div class="row">
+        <div class="field">
+          <label for="auth-user">Username</label>
+          <input type="text" id="auth-user" placeholder="demo" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="auth-pass">Password</label>
+          <input type="password" id="auth-pass" placeholder="••••••" autocomplete="current-password">
+        </div>
+      </div>
+      <div class="row actions">
+        <button id="login-btn">Login</button>
+        <button id="signup-btn" class="btn secondary">Sign up (100 free credits)</button>
+        <button id="more-credits-btn" class="btn secondary">Get more credits</button>
+      </div>
+      <p id="auth-msg" class="muted" role="status"></p>
+      <p class="muted small">Demo account: <b>demo</b> / <b>awaazai123</b> — test ke liye banaya gaya hai. Password kabhi plain text mein save nahi hota.</p>
+    </div>
+    <p id="auth-logged" class="muted hidden"></p>
+  </section>
+
   <section class="demo card">
     <h2>Try it — Text to Speech demo</h2>
-    <p class="muted">Type text, pick a voice, and hear real Kokoro-82M audio generated on this machine.</p>
+    <p class="muted">Type text, pick a voice, and hear real Kokoro-82M audio generated on this machine. <span id="tts-cost" class="muted"></span></p>
     <label for="text">Text <span class="muted">(max 1000 characters)</span></label>
     <textarea id="text" rows="4" maxlength="1000">Hello, this is AwaazAI. A natural voice, made on your own laptop.</textarea>
     <div class="row">
@@ -51,7 +81,9 @@
 
   <section class="demo card" id="clone">
     <h2>Voice Cloning — apni awaz ki copy</h2>
-    <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B Base. <span id="clone-status" class="muted">Checking cloning engine…</span></p>
+    <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B Base. Cloning ke liye login zaroori hai (10 credits per clone). <span id="clone-status" class="muted">Checking cloning engine…</span></p>
+    <label for="saved-voice">Saved voice <span class="muted">(pehle se save ki hui awaz chunein, ya neeche nayi upload karein)</span></label>
+    <select id="saved-voice"><option value="">— Nayi reference upload karein —</option></select>
     <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
     <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
     <label for="clone-text">Text <span class="muted">(max 500 characters)</span></label>
@@ -78,10 +110,23 @@
     <div class="row actions">
       <button id="clone-btn">Clone voice &amp; generate</button>
       <a id="clone-download" class="btn hidden" href="#" download="awaazai-clone.wav">Download clone WAV</a>
+      <button id="save-voice-btn" class="btn secondary hidden">Save this voice</button>
     </div>
     <p id="clone-msg" class="muted" role="status"></p>
     <audio id="clone-player" controls class="hidden"></audio>
     <p class="muted small">Cloning CPU par slow ho sakta hai — aik chhoti audio mein kuch minute lag sakte hain. Agar engine is server par installed nahi hai to saaf error milega, fake audio nahi.</p>
+  </section>
+
+  <section class="card" id="my-voices">
+    <h2>My Voices — saved cloned voices</h2>
+    <p class="muted">Save ki hui awazein yahan dikhengi. Kisi awaz ko clone section mein chunein to dobara upload nahi karna parega.</p>
+    <ul id="voices-list" class="list"><li class="muted">Login karein to saved voices dikhengi.</li></ul>
+  </section>
+
+  <section class="card" id="history">
+    <h2>History — aap ki generations</h2>
+    <p class="muted">Login ke baad ki har TTS aur Clone generation yahan save hoti hai — play, download aur delete kar sakte hain.</p>
+    <ul id="history-list" class="list"><li class="muted">Login karein to history dikhegi.</li></ul>
   </section>
 
   <section class="features">
@@ -99,12 +144,12 @@
 
   <section class="card note">
     <h3>Honest note</h3>
-    <p>Ye v0.2.2 hai: Text-to-Speech kaam karta hai (54 fixed Kokoro voices) aur Voice Cloning bhi chal raha hai (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone). Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai. Dubbing, login, history aur credits abhi nahi bane — wo Phase 1 / Phase 2 mein aayenge.</p>
+    <p>Ye v0.3.0 hai: Text-to-Speech (54 fixed Kokoro voices), Voice Cloning (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone), aur ab login, history, credits aur saved voices bhi hain. Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai. Dubbing aur Studio abhi nahi bane — wo Phase 2 mein aayenge.</p>
   </section>
 </main>
 
 <footer>
-  <p>AwaazAI v0.2.2 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0)</p>
+  <p>AwaazAI v0.3.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0)</p>
 </footer>
 <script src="app.js"></script>
 </body>

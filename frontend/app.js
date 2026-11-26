@@ -1,11 +1,102 @@
-// AwaazAI demo — calls the local FastAPI backend. No fake audio: every
-// clip comes from POST /api/tts (Kokoro-82M) on this machine.
+// AwaazAI frontend — calls the local FastAPI backend. No fake audio: every
+// clip comes from POST /api/tts (Kokoro-82M) or POST /api/clone (Qwen3-TTS).
 const $ = (id) => document.getElementById(id);
 const voiceSel = $("voice"), textEl = $("text"), speedEl = $("speed"),
   speedVal = $("speed-val"), btn = $("generate"), msg = $("msg"),
-  player = $("player"), download = $("download"), pill = $("status-pill");
+  player = $("player"), download = $("download"), pill = $("status-pill"),
+  creditsPill = $("credits-pill"), userPill = $("user-pill"),
+  logoutBtn = $("logout-btn");
 
 let audioUrl = null;
+let token = localStorage.getItem("awaazai_token") || null;
+let username = localStorage.getItem("awaazai_user") || null;
+const DEMO_LIMIT = 5;
+let demoUsed = Number(localStorage.getItem("awaazai_demo_used") || 0);
+
+function authHeaders(extra) {
+  const h = extra || {};
+  if (token) h["Authorization"] = "Bearer " + token;
+  return h;
+}
+
+function setCredits(n) {
+  creditsPill.textContent = (n === null || n === undefined)
+    ? "Credits: — (login karein)"
+    : `Credits: ${n}`;
+}
+
+function updateDemoLabel() {
+  $("demo-left").textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
+  $("tts-cost").textContent = token
+    ? "Logged in: 1 credit per 100 characters."
+    : `Demo: is session mein ${Math.max(0, DEMO_LIMIT - demoUsed)} / ${DEMO_LIMIT} generations bache hain — login par 100 credits milte hain.`;
+}
+
+function renderAuth() {
+  const loggedIn = !!token;
+  $("auth-forms").classList.toggle("hidden", loggedIn);
+  $("auth-logged").classList.toggle("hidden", !loggedIn);
+  userPill.classList.toggle("hidden", !loggedIn);
+  logoutBtn.classList.toggle("hidden", !loggedIn);
+  if (loggedIn) {
+    userPill.textContent = "👤 " + username;
+    $("auth-logged").textContent = `${username} — logged in. History aur saved voices neeche dikhengi.`;
+  }
+  updateDemoLabel();
+}
+
+async function refreshCredits() {
+  if (!token) { setCredits(null); return; }
+  try {
+    const r = await fetch("/api/credits", { headers: authHeaders() });
+    if (r.status === 401) { doLogout(true); return; }
+    const d = await r.json();
+    setCredits(d.credits);
+  } catch { /* keep old value */ }
+}
+
+function doLogout(silent) {
+  if (token) fetch("/api/auth/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
+  token = null; username = null;
+  localStorage.removeItem("awaazai_token");
+  localStorage.removeItem("awaazai_user");
+  setCredits(null);
+  $("history-list").innerHTML = '<li class="muted">Login karein to history dikhegi.</li>';
+  $("voices-list").innerHTML = '<li class="muted">Login karein to saved voices dikhengi.</li>';
+  $("saved-voice").innerHTML = '<option value="">— Nayi reference upload karein —</option>';
+  if (!silent) $("auth-msg").textContent = "Logged out.";
+  renderAuth();
+}
+
+async function authAction(path) {
+  const u = $("auth-user").value.trim(), p = $("auth-pass").value;
+  if (!u || !p) { $("auth-msg").textContent = "Username aur password dono likhein."; return; }
+  $("auth-msg").textContent = "Please wait…";
+  try {
+    const r = await fetch(path, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: u, password: p }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "Auth failed");
+    token = d.token; username = d.user.username;
+    localStorage.setItem("awaazai_token", token);
+    localStorage.setItem("awaazai_user", username);
+    $("auth-msg").textContent = `Welcome, ${username}! ${d.user.credits} credits mil gaye.`;
+    setCredits(d.user.credits);
+    renderAuth();
+    loadHistory(); loadSavedVoices();
+  } catch (e) {
+    $("auth-msg").textContent = "Error: " + e.message;
+  }
+}
+
+$("login-btn").addEventListener("click", () => authAction("/api/auth/login"));
+$("signup-btn").addEventListener("click", () => authAction("/api/auth/signup"));
+logoutBtn.addEventListener("click", () => doLogout(false));
+$("more-credits-btn").addEventListener("click", () => {
+  $("auth-msg").textContent = "Credits khareedna abhi Coming Soon hai — filhal admin se rabta karein. Naye users ko 100 free credits milte hain.";
+});
 
 async function loadHealth() {
   try {
@@ -45,33 +136,118 @@ speedEl.addEventListener("input", () => { speedVal.textContent = Number(speedEl.
 btn.addEventListener("click", async () => {
   const text = textEl.value.trim();
   if (!text) { msg.textContent = "Pehle kuch text likhein."; return; }
+  if (!token && demoUsed >= DEMO_LIMIT) {
+    msg.textContent = "Demo limit khatam (5/5). Login ya signup karein — 100 free credits milte hain.";
+    return;
+  }
   btn.disabled = true; msg.textContent = "Generating… (CPU par pehli dafa model load hone mein kuch second lag sakte hain)";
   try {
     const r = await fetch("/api/tts", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ text, voice: voiceSel.value, speed: Number(speedEl.value) }),
     });
+    if (r.status === 402) {
+      const d = await r.json();
+      throw new Error(d.detail + " Get more credits abhi Coming Soon hai.");
+    }
     if (!r.ok) throw new Error((await r.json()).detail || "TTS failed");
     const blob = await r.blob();
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = URL.createObjectURL(blob);
     player.src = audioUrl; player.classList.remove("hidden");
     download.href = audioUrl; download.classList.remove("hidden");
+    const remaining = r.headers.get("X-Credits-Remaining");
+    if (remaining !== null) setCredits(Number(remaining));
+    else { demoUsed += 1; localStorage.setItem("awaazai_demo_used", String(demoUsed)); updateDemoLabel(); }
     msg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, engine Kokoro-82M.`;
     player.play().catch(() => {});
+    if (token) loadHistory();
   } catch (e) {
     msg.textContent = "Error: " + e.message;
   } finally { btn.disabled = false; }
 });
 
-loadHealth();
-loadVoices();
+// ---- History ----
+async function loadHistory() {
+  const list = $("history-list");
+  if (!token) return;
+  try {
+    const r = await fetch("/api/history", { headers: authHeaders() });
+    if (!r.ok) throw new Error("history failed");
+    const d = await r.json();
+    if (!d.history.length) { list.innerHTML = '<li class="muted">Abhi koi history nahi — pehle TTS ya Clone generate karein.</li>'; return; }
+    list.innerHTML = "";
+    for (const h of d.history) {
+      const li = document.createElement("li");
+      const when = new Date(h.created_at).toLocaleString();
+      li.innerHTML = `<b>${h.type.toUpperCase()}</b> · ${h.voice} · ${h.credits_cost} credits · ${when}<br>
+        <span class="muted">${h.text_snippet}</span><br>`;
+      if (h.has_audio) {
+        const a = document.createElement("a");
+        a.href = `/api/history/${h.id}/audio`;
+        a.textContent = "▶ Play / download";
+        a.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          fetch(`/api/history/${h.id}/audio`, { headers: authHeaders() })
+            .then((res) => res.blob()).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              const audio = new Audio(url); audio.play().catch(() => {});
+              const dl = document.createElement("a"); dl.href = url; dl.download = `awaazai-${h.type}-${h.id}.wav`; dl.click();
+            });
+        });
+        li.appendChild(a);
+        li.appendChild(document.createTextNode("  "));
+      }
+      const del = document.createElement("button");
+      del.textContent = "Delete"; del.className = "btn secondary small";
+      del.addEventListener("click", async () => {
+        await fetch(`/api/history/${h.id}`, { method: "DELETE", headers: authHeaders() });
+        loadHistory();
+      });
+      li.appendChild(del);
+      list.appendChild(li);
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="muted">History load nahi hui.</li>';
+  }
+}
 
-// ---- Voice cloning (POST /api/clone, multipart) ----
+// ---- Saved voices ----
+async function loadSavedVoices() {
+  const list = $("voices-list"), sel = $("saved-voice");
+  if (!token) return;
+  try {
+    const r = await fetch("/api/voices/saved", { headers: authHeaders() });
+    if (!r.ok) throw new Error("saved voices failed");
+    const d = await r.json();
+    sel.innerHTML = '<option value="">— Nayi reference upload karein —</option>';
+    if (!d.voices.length) { list.innerHTML = '<li class="muted">Koi saved voice nahi — clone ke baad "Save this voice" dabayein.</li>'; return; }
+    list.innerHTML = "";
+    for (const v of d.voices) {
+      const o = document.createElement("option");
+      o.value = v.id; o.textContent = `${v.name} (${v.language})`;
+      sel.appendChild(o);
+      const li = document.createElement("li");
+      li.innerHTML = `<b>${v.name}</b> · ${v.language} · ${new Date(v.created_at).toLocaleString()} `;
+      const del = document.createElement("button");
+      del.textContent = "Delete"; del.className = "btn secondary small";
+      del.addEventListener("click", async () => {
+        await fetch(`/api/voices/saved/${v.id}`, { method: "DELETE", headers: authHeaders() });
+        loadSavedVoices();
+      });
+      li.appendChild(del);
+      list.appendChild(li);
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="muted">Saved voices load nahi hui.</li>';
+  }
+}
+
+// ---- Voice cloning ----
 const refEl = $("ref-audio"), cloneTextEl = $("clone-text"), langEl = $("clone-lang"),
   consentEl = $("consent"), cloneBtn = $("clone-btn"), cloneMsg = $("clone-msg"),
   clonePlayer = $("clone-player"), cloneDownload = $("clone-download"),
-  cloneStatus = $("clone-status");
+  cloneStatus = $("clone-status"), saveVoiceBtn = $("save-voice-btn");
 let cloneUrl = null;
 
 async function loadCloneStatus() {
@@ -87,19 +263,27 @@ async function loadCloneStatus() {
 }
 
 cloneBtn.addEventListener("click", async () => {
-  if (!refEl.files || !refEl.files[0]) { cloneMsg.textContent = "Pehle reference audio upload karein (3–30 second)."; return; }
+  if (!token) { cloneMsg.textContent = "Cloning ke liye login zaroori hai — pehle login ya signup karein."; return; }
+  const savedId = $("saved-voice").value;
+  if (!savedId && (!refEl.files || !refEl.files[0])) { cloneMsg.textContent = "Pehle reference audio upload karein (3–30 second) ya saved voice chunein."; return; }
   const text = cloneTextEl.value.trim();
   if (!text) { cloneMsg.textContent = "Pehle clone ke liye text likhein."; return; }
   if (!consentEl.checked) { cloneMsg.textContent = "Consent zaroori hai — checkbox tick karein ke ye aap ki apni awaz hai ya permission hai."; return; }
   const form = new FormData();
-  form.append("reference", refEl.files[0]);
+  if (savedId) form.append("saved_voice_id", savedId);
+  else form.append("reference", refEl.files[0]);
   form.append("text", text);
   form.append("language", langEl.value);
   form.append("consent", consentEl.checked ? "true" : "false");
-  cloneBtn.disabled = true;
+  cloneBtn.disabled = true; saveVoiceBtn.classList.add("hidden");
   cloneMsg.textContent = "Cloning… CPU par is mein kuch minute lag sakte hain, page band na karein.";
   try {
-    const r = await fetch("/api/clone", { method: "POST", body: form });
+    const r = await fetch("/api/clone", { method: "POST", headers: authHeaders(), body: form });
+    if (r.status === 402) {
+      const d = await r.json();
+      throw new Error(d.detail + " Get more credits abhi Coming Soon hai.");
+    }
+    if (r.status === 401) throw new Error("Login zaroori hai — session khatam ho gaya ho to dobara login karein.");
     if (!r.ok) {
       let detail = "Clone failed";
       try { detail = (await r.json()).detail || detail; } catch { /* keep default */ }
@@ -110,11 +294,39 @@ cloneBtn.addEventListener("click", async () => {
     cloneUrl = URL.createObjectURL(blob);
     clonePlayer.src = cloneUrl; clonePlayer.classList.remove("hidden");
     cloneDownload.href = cloneUrl; cloneDownload.classList.remove("hidden");
+    const remaining = r.headers.get("X-Credits-Remaining");
+    if (remaining !== null) setCredits(Number(remaining));
     cloneMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, cloned voice (Qwen3-TTS 0.6B).`;
     clonePlayer.play().catch(() => {});
+    if (!savedId) saveVoiceBtn.classList.remove("hidden");
+    loadHistory();
   } catch (e) {
     cloneMsg.textContent = "Error: " + e.message;
   } finally { cloneBtn.disabled = false; }
 });
 
+saveVoiceBtn.addEventListener("click", async () => {
+  const name = prompt("Is voice ka naam kya rakhein?", "My voice");
+  if (!name) return;
+  if (!refEl.files || !refEl.files[0]) { cloneMsg.textContent = "Save karne ke liye reference audio dobara chunein."; return; }
+  const form = new FormData();
+  form.append("name", name);
+  form.append("language", langEl.value);
+  form.append("reference", refEl.files[0]);
+  cloneMsg.textContent = "Voice save ho rahi hai…";
+  try {
+    const r = await fetch("/api/voices/save", { method: "POST", headers: authHeaders(), body: form });
+    if (!r.ok) throw new Error((await r.json()).detail || "Save failed");
+    cloneMsg.textContent = `Voice "${name}" save ho gayi.`;
+    saveVoiceBtn.classList.add("hidden");
+    loadSavedVoices();
+  } catch (e) {
+    cloneMsg.textContent = "Error: " + e.message;
+  }
+});
+
+loadHealth();
+loadVoices();
 loadCloneStatus();
+renderAuth();
+if (token) { refreshCredits(); loadHistory(); loadSavedVoices(); }

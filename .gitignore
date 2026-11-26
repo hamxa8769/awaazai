@@ -9,3 +9,5 @@ tools/
 *.mp3
 !samples/**/*.mp3
 .DS_Store
+awaazai.db
+data/
