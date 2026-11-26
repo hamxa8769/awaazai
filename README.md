@@ -1,15 +1,17 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.7.0 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.8.0 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.7.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
-> voices, CPU par). Voice cloning engine is VM par **abhi crash karta hai** (qwentts.cpp binary SIGILL — Illegal instruction — inference shuru hote hi; `/api/clone/status` phir bhi "ready" kehta hai, sirf binary + models ki presence check karta hai). v0.6.0 mein clone is VM par pass hua tha — VM/CPU tab se badla lagta hai; user ke PC par asal test hoga, wahan binary dobara build karna par sakta hai.
-> **Urdu Qwen mein supported nahi hai** (Phase 0 verdict:
-> FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
+> **Honest status v0.8.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> voices, CPU par) **aur Urdu TTS bhi — Piper se (Aegis female + Fasih male,
+> 22,050 Hz, CPU par)**. User ne dono Urdu samples sun kar "Han" kaha —
+> awaz saaf hai lekin thori robotic lag sakti hai, yehi Piper ki had hai. Voice cloning engine is VM par **abhi crash karta hai** (qwentts.cpp binary SIGILL — Illegal instruction — inference shuru hote hi; `/api/clone/status` phir bhi "ready" kehta hai, sirf binary + models ki presence check karta hai). v0.6.0 mein clone is VM par pass hua tha — VM/CPU tab se badla lagta hai; user ke PC par asal test hoga, wahan binary dobara build karna par sakta hai.
+> **Urdu ke teen raste (Voice Training page):** 1) Piper — live, fast/light, thora robotic; 2) Fish Speech S2 — zyada natural, lekin GPU (12 GB+ VRAM) chahiye aur licence research/non-commercial — is VM par GPU nahi hai, is liye "GPU test pending"; 3) Own-voice training — recordings intake + validation + queue live hai, training khud GPU ka kaam hai, CPU par instant nahi hoti.
+> **Naya v0.8.0: Piper Urdu TTS + Voice Training page** — `POST /api/tts` par `ur_aegis` / `ur_fasih` (Piper 1.8.0, GPL-3.0 fork — paid/commercial use se pehle licence + Aegis provenance check zaroori, neeche detail), `/api/voices` mein 56 voices, in-app Piper downloader (~126 MB, Account → Models), TTS/Voices mein Urdu filter, Fish Speech readiness check (`GET /api/fish-speech/status`), training intake (`POST /api/training/upload` — duration/sample-rate/loudness/silence validation, 30-minute goal, queue).
 > **Naya v0.7.0: ElevenLabs-style frontend rebuild** — compact pinned sidebar footer (84 px), version runtime par `/api/health` se, TTS two-column layout, Voices tabs (Library / My Voices / Add Voice), real-state Home checklist, step indicators har page par, har button par spinner + double-submit block, 1366×768 / 1920×1080 / 480 / 360 px par verify. Backend API unchanged. Details: CHANGELOG + `docs/elevenlabs-ui-research.md` (bug audit B1–B12, sab fix).
 > **Naya v0.6.0: saare sections professionally upgrade + in-app Kokoro model downloader** — TTS voice grid/cards (search, char/cost counter), Clone 4-step wizard + drag-drop + sample reference, My Voices cards, Dubbing side-by-side transcript/translation, Studio chapters with jump, STT transcript download, History filters + date grouping, Account profile + change-password, toasts + spinners, koi stuck "Loading…" nahi. Model missing ho to app ke andar hi "Download Kokoro models (~338 MB)" button se download hota hai (`POST /api/models/download`, sirf 127.0.0.1, progress bar) — manual download ki zaroorat nahi.
 > **Naya v0.5.0: professional sidebar UI + in-app Update button** — ElevenLabs-style sidebar, aik waqt mein aik page (Home, TTS, Cloning, My Voices, Dubbing, Studio, STT, History, Account), dashboard stats + recent generations. Update button sidebar aur Account page mein: `GET /api/update/check` GitHub releases se latest version batata hai, `POST /api/update/apply` (sirf 127.0.0.1) `git pull origin main` chalata hai — `data/` aur `models/` gitignored hain, pull un ko kabhi delete nahi karta. Server khud restart nahi hota: update ke baad Ctrl+C karke `start.bat` dobara chalana parta hai, button yehi imaandari se batata hai.
@@ -27,8 +29,8 @@ CHANGELOG entry — bina tag ke koi release nahi.
 | Landing page + logo (AwaazAI) | ✅ Done — `frontend/index.html` |
 | TTS demo box (text → play/download) | ✅ Done, real Kokoro audio |
 | `GET /api/health` | ✅ Done |
-| `GET /api/voices` (54 Kokoro voices) | ✅ Done |
-| `POST /api/tts` (text → WAV) | ✅ Done, verified with real sample |
+| `GET /api/voices` (54 Kokoro + 2 Piper Urdu voices) | ✅ Done v0.8.0 |
+| `POST /api/tts` (text → WAV) | ✅ Done, verified with real sample — Urdu via Piper (ur_aegis / ur_fasih) v0.8.0 |
 | `POST /api/clone` | ✅ Done — **engine runs, English clone tested** (Qwen3-TTS 0.6B Base, ~30 s per short clone on CPU) |
 | `GET /api/clone/status` | ✅ Done — engine state, languages, Urdu note |
 | Dubbing (`POST /api/dub`) | ✅ Done v0.4.0 — STT + re-voice; same-language live, cross-language 501 (argos-translate not installed) |

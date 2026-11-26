@@ -197,3 +197,11 @@ a { color: var(--teal); }
   .content { padding: 14px 12px 28px; }
   .page-title { font-size: 18px; }
 }
+
+/* ---- v0.8.0: Urdu voice badge + three-paths comparison ---- */
+.voice-card .voice-engine { display: inline-block; margin-top: 8px; margin-left: 6px; font-size: 12px; padding: 3px 8px; border: 1px solid var(--teal); border-radius: 999px; color: var(--teal); }
+.paths { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+.path-card { background: #0e1428; border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.path-card h3 { margin: 0; font-size: 16px; }
+.path-card .pill { align-self: flex-start; }
+@media (max-width: 900px) { .paths { grid-template-columns: 1fr; } }
