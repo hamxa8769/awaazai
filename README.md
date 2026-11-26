@@ -1,19 +1,18 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.4.1 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.5.0 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.4.1:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> **Honest status v0.5.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
 > voices, CPU par). Voice cloning bhi **chal raha hai** (Qwen3-TTS 0.6B Base
 > via qwentts.cpp, CPU par) — user ki approval ke baad engine build hua aur
 > English clone test pass hua (30 second mein 5.44 s audio, neeche dekhein).
 > **Urdu Qwen mein supported nahi hai** (Phase 0 verdict:
 > FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
-> **Naya v0.3.0: login, history, credits aur saved voices** — local SQLite
-> database, koi external service nahi, koi real payment nahi.
+> **Naya v0.5.0: professional sidebar UI + in-app Update button** — ElevenLabs-style sidebar, aik waqt mein aik page (Home, TTS, Cloning, My Voices, Dubbing, Studio, STT, History, Account), dashboard stats + recent generations. Update button sidebar aur Account page mein: `GET /api/update/check` GitHub releases se latest version batata hai, `POST /api/update/apply` (sirf 127.0.0.1) `git pull origin main` chalata hai — `data/` aur `models/` gitignored hain, pull un ko kabhi delete nahi karta. Server khud restart nahi hota: update ke baad Ctrl+C karke `start.bat` dobara chalana parta hai, button yehi imaandari se batata hai.
 > **Naya v0.4.1: start.bat Python detection fix** — `where python` fail hone par bhi `py` launcher aur common install locations se Python dhoondhta hai; `.venv` ho to system Python ki zaroorat hi nahi. Agar phir bhi na mile to diagnostics print karta hai.
 > **Naya v0.4.0: Speech-to-Text (faster-whisper tiny, CPU), Dubbing aur
 > Studio** — dubbing same-language kaam karta hai; cross-language
@@ -36,6 +35,8 @@ CHANGELOG entry — bina tag ke koi release nahi.
 | Studio (`POST /api/studio`) | ✅ Done v0.4.0 — 5000 chars, chunked, chapters, aik WAV |
 | Speech-to-Text (`POST /api/stt`) | ✅ Done v0.4.0 — faster-whisper tiny, CPU, free |
 | Login / history / credits | ✅ Done v0.3.0 — local SQLite, 100 free credits, history, saved voices |
+| Professional sidebar UI + dashboard | ✅ Done v0.5.0 — aik waqt mein aik page, sidebar nav, stats, recent |
+| In-app Update button | ✅ Done v0.5.0 — check + git pull (local-only), restart prompt — server khud restart nahi hota |
 | Server start script (`start.bat` / `./start.sh` / `python3 start.py`) | ✅ Done — server + browser khulta hai |
 
 ## Kaise chalaye — server start karo, browser khud khul jayega
@@ -292,7 +293,8 @@ clone karna block hoga; generated audio par watermark/metadata rahegi.
    live, cross-language 501 kyunki argos-translate abhi installed nahi hai),
    Studio (5000 chars, sentence-boundary chunks, chapters, TTS rate).
    Baaki: argos-translate pairs install karke cross-language dub kholna.
-5. **Public launch** — paid plans, API keys, GPU server (Phase 3).
+5. **Professional UI + Update button — DONE in v0.5.0** — sidebar layout, dashboard, in-app update (check + git pull, local-only, restart prompt).
+6. **Public launch** — paid plans, API keys, GPU server (Phase 3).
 
 ## Full plan
 
