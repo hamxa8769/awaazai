@@ -51,7 +51,7 @@ from backend import accounts, clone_engine, models_downloader, stt_engine, studi
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 app = FastAPI(title="AwaazAI", version=VERSION)
 

@@ -15,7 +15,7 @@
       <img src="/assets/logo.png" alt="AwaazAI logo" class="logo">
       <div class="brand-text">
         <span class="brand-name">Awaaz<span>AI</span></span>
-        <span class="brand-sub">v0.6.0 · local</span>
+        <span class="brand-sub" id="brand-version">Loading…</span>
       </div>
     </div>
     <nav class="nav" aria-label="Main navigation">
@@ -25,11 +25,11 @@
       <button class="nav-item" data-page="tts" data-title="Text to Speech">
         <span class="nav-icon" aria-hidden="true">✎</span><span class="nav-label">Text to Speech</span>
       </button>
+      <button class="nav-item" data-page="voices" data-title="Voices">
+        <span class="nav-icon" aria-hidden="true">♫</span><span class="nav-label">Voices</span>
+      </button>
       <button class="nav-item" data-page="clone" data-title="Voice Cloning">
         <span class="nav-icon" aria-hidden="true">◎</span><span class="nav-label">Voice Cloning</span>
-      </button>
-      <button class="nav-item" data-page="voices" data-title="My Voices">
-        <span class="nav-icon" aria-hidden="true">♫</span><span class="nav-label">My Voices</span>
       </button>
       <button class="nav-item" data-page="dub" data-title="Dubbing">
         <span class="nav-icon" aria-hidden="true">⇄</span><span class="nav-label">Dubbing</span>
@@ -48,12 +48,17 @@
       </button>
     </nav>
     <div class="sidebar-footer">
-      <span class="pill hidden" id="user-pill"></span>
-      <span class="pill" id="sidebar-credits">Credits: —</span>
-      <button id="logout-btn" class="btn small hidden">Logout</button>
-      <button id="update-btn" class="btn secondary small">Check for updates</button>
-      <p class="muted small sidebar-note" id="update-msg" role="status"></p>
-      <p class="muted small sidebar-note">Local-first · no cloud · CPU-friendly</p>
+      <div class="footer-user">
+        <span class="avatar" id="footer-avatar">?</span>
+        <div class="footer-user-text">
+          <span class="footer-name" id="footer-name">Guest</span>
+          <span class="footer-credits" id="sidebar-credits">Credits: login to see</span>
+        </div>
+      </div>
+      <div class="footer-actions">
+        <button id="logout-btn" class="btn small hidden">Logout</button>
+        <button id="update-btn" class="btn secondary small">Check for updates</button>
+      </div>
     </div>
   </aside>
 
@@ -62,8 +67,9 @@
       <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
       <h1 class="page-title" id="page-title">Home</h1>
       <div class="top-right">
-        <span class="pill" id="credits-pill" title="Credits — login karein to 100 free credits milte hain">Credits: —</span>
-        <span class="pill" id="status-pill">Checking engine…</span>
+        <span class="pill" id="status-pill" title="Engine status"><span class="pill-dot" aria-hidden="true"></span><span class="pill-text">Checking engine…</span></span>
+        <span class="pill" id="credits-pill" title="Credits — login karein to 100 free credits milte hain">Credits: login</span>
+        <span class="avatar avatar-top" id="top-avatar" title="Account">?</span>
       </div>
     </header>
 
@@ -75,16 +81,25 @@
           <p class="tagline">Natural AI voice, cloning aur dubbing — ab aap ke laptop par.</p>
           <p class="tagline-en">Natural AI voices, voice cloning and dubbing — on your own laptop, with no heavy hardware.</p>
           <div class="badges">
-            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>Urdu + English</span>
+            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>English · 10 languages</span>
           </div>
         </div>
+        <div class="card">
+          <h2>Getting started</h2>
+          <ul class="checklist" id="home-checklist">
+            <li id="check-models"><span class="check-state" aria-hidden="true">○</span><span class="check-text">Kokoro models downloaded — TTS ready</span></li>
+            <li id="check-login"><span class="check-state" aria-hidden="true">○</span><span class="check-text">Logged in — 100 free credits, history &amp; saved voices</span></li>
+            <li id="check-tts"><span class="check-state" aria-hidden="true">○</span><span class="check-text">First Text-to-Speech generated</span></li>
+            <li id="check-clone"><span class="check-state" aria-hidden="true">○</span><span class="check-text">First voice cloned</span></li>
+          </ul>
+        </div>
         <div class="stats">
-          <div class="stat card"><span class="stat-num" id="stat-credits">—</span><span class="stat-label">Credits</span></div>
-          <div class="stat card"><span class="stat-num" id="stat-generations">—</span><span class="stat-label">Generations</span></div>
-          <div class="stat card"><span class="stat-num" id="stat-voices">—</span><span class="stat-label">Saved voices</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-credits">0</span><span class="stat-label">Credits</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-generations">0</span><span class="stat-label">Generations</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-voices">0</span><span class="stat-label">Saved voices</span></div>
         </div>
         <div class="card">
-          <h3>Quick actions</h3>
+          <h2>Quick actions</h2>
           <div class="row actions">
             <button data-goto="tts">Text to Speech</button>
             <button class="btn secondary" data-goto="clone">Clone a voice</button>
@@ -93,85 +108,137 @@
           </div>
         </div>
         <div class="card">
-          <h3>Recent generations</h3>
+          <h2>Recent generations</h2>
           <ul id="recent-list" class="list"><li class="muted">Login karein to recent generations dikhengi.</li></ul>
           <p><a href="#history" data-goto="history">View full history →</a></p>
         </div>
-        <div class="features">
-          <div class="card">
-            <h3>Dubbing — live</h3>
-            <p>Whisper transcribe, translate, phir wohi awaz doosri zuban mein. Same-language dub abhi kaam karta hai.</p>
-            <span class="soon">v0.6.0 — live</span>
-          </div>
-          <div class="card">
-            <h3>Studio — live</h3>
-            <p>Audiobook aur podcast ke liye lambi narration — chapters ke sath, aik file mein.</p>
-            <span class="soon">v0.6.0 — live</span>
-          </div>
-        </div>
-        <div class="card note">
-          <h3>Honest note</h3>
-          <p>Ye v0.6.0 hai: Text-to-Speech (54 fixed Kokoro voices), Voice Cloning (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone), login, history, credits, saved voices, Speech-to-Text (faster-whisper tiny), Dubbing (same-language dub live; cross-language translation ke liye argos-translate abhi installed nahi hai — 501 ke sath transcript milega) aur Studio (5000 characters tak, chapters ke sath). Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai.</p>
+        <div class="card honest-card">
+          <h2>Honest status</h2>
+          <p>TTS (54 Kokoro voices), cloning (Qwen, English + 9 more languages — Urdu not supported), STT and Studio work on this machine. Cross-language dubbing still needs the translation pack. Full details: Account → About.</p>
         </div>
       </section>
 
       <!-- TEXT TO SPEECH -->
       <section class="page" id="page-tts" data-page="tts">
-        <div class="demo card">
-          <h2>Text to Speech</h2>
-          <p class="muted">Type text, pick a voice, and hear real Kokoro-82M audio generated on this machine. <span id="tts-cost" class="muted"></span></p>
-          <div id="model-card" class="model-card hidden" role="status">
-            <h3>⚠ Kokoro models missing</h3>
-            <p id="model-card-text" class="muted">Kokoro model files is machine par nahi mileen — TTS tab tak nahi chalega jab tak models download na hon.</p>
-            <div class="row actions">
-              <button id="model-download-btn" class="btn secondary">Download Kokoro models (~338 MB)</button>
+        <div class="tts-layout">
+          <div class="tts-main">
+            <div class="card">
+              <h2>Text to Speech</h2>
+              <p class="muted">Type text, pick a voice on the right, and hear real Kokoro-82M audio generated on this machine. <span id="tts-cost" class="muted"></span></p>
+              <label for="text">Text <span class="muted">(max 1000 characters)</span></label>
+              <textarea id="text" rows="6" maxlength="1000">Hello, this is AwaazAI. A natural voice, made on your own laptop.</textarea>
+              <p class="muted small"><span id="tts-count">0/1000</span> · <span id="tts-words">0 words</span> · <span id="tts-cost-preview"></span></p>
+              <div class="row actions">
+                <button id="generate">Generate audio</button>
+                <a id="download" class="btn hidden" href="#" download="awaazai.wav">Download WAV</a>
+              </div>
+              <p id="msg" class="muted" role="status"></p>
+              <audio id="player" controls class="hidden"></audio>
+              <p class="muted small">Sample: <a href="/sample.wav" download>sample.wav</a> (generated with this same engine, voice af_heart).</p>
+              <p class="muted small">Bina login ke bhi TTS demo try kar sakte hain — <span id="demo-left">5 demo generations</span> is browser session mein.</p>
             </div>
-            <div class="progress hidden" id="model-progress-wrap"><div class="progress-bar" id="model-progress"></div></div>
-            <p id="model-progress-text" class="muted small"></p>
-            <p id="model-manual-note" class="muted small hidden">Manual download: Kokoro-82M ki files (<b>kokoro-v1.0.onnx</b> aur <b>voices-v1.0.bin</b>) <a href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank" rel="noopener">Hugging Face — hexgrad/Kokoro-82M</a> se le kar is project ke <b>models/</b> folder mein rakhein, phir server restart karein. Details README mein hain.</p>
+            <div class="card">
+              <h2>Generations</h2>
+              <ul id="tts-generations" class="list"><li class="muted">No generations yet in this session — generate audio above to hear it here.</li></ul>
+              <h3>Recent TTS</h3>
+              <ul id="tts-recent" class="list"><li class="muted">Login karein to recent TTS generations dikhengi.</li></ul>
+            </div>
           </div>
-          <label for="text">Text <span class="muted">(max 1000 characters)</span></label>
-          <textarea id="text" rows="4" maxlength="1000">Hello, this is AwaazAI. A natural voice, made on your own laptop.</textarea>
-          <p class="muted small"><span id="tts-count">0/1000</span> · <span id="tts-cost-preview"></span></p>
-          <label for="voice-search">Voice — search</label>
-          <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
-          <div id="voice-grid" class="voice-grid" role="listbox" aria-label="Voices"><p class="muted">Loading voices…</p></div>
-          <details class="fallback-select">
-            <summary>Voice list (fallback)</summary>
-            <label for="voice">Voice</label>
-            <select id="voice"><option value="af_heart">Loading voices…</option></select>
-          </details>
-          <div class="row">
-            <div class="field">
-              <label for="speed">Speed: <span id="speed-val">1.0×</span></label>
+          <div class="tts-side">
+            <div class="card" id="voice-panel">
+              <h2>Voice</h2>
+              <p class="muted small">54 Kokoro voices. Pick one — it is used for every generation on this page.</p>
+              <label for="voice-search">Search voices</label>
+              <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
+              <div class="chips" id="tts-gender-filters" role="group" aria-label="Filter voices by gender">
+                <button class="chip active" data-gender="all">All</button>
+                <button class="chip" data-gender="female">Female</button>
+                <button class="chip" data-gender="male">Male</button>
+              </div>
+              <div id="voice-grid" class="voice-list" role="listbox" aria-label="Voices"><p class="muted">Loading voices…</p></div>
+              <div id="voices-error" class="error-box hidden">
+                <p class="muted" id="voices-error-text">Voices load nahi hui.</p>
+                <button id="voices-retry" class="btn secondary small">Retry loading voices</button>
+              </div>
+              <p class="muted small">No sample playback here yet — generate audio to hear a voice.</p>
+              <select id="voice" class="hidden" aria-hidden="true" tabindex="-1"><option value="af_heart">Loading voices…</option></select>
+            </div>
+            <div class="card hidden" id="model-card" role="status">
+              <h2>Kokoro models missing</h2>
+              <p id="model-card-text" class="muted">Kokoro model files is machine par nahi mileen — TTS tab tak nahi chalega jab tak models download na hon.</p>
+              <div class="row actions">
+                <button id="model-download-btn" class="btn secondary">Download Kokoro models (~338 MB)</button>
+              </div>
+              <div class="progress hidden" id="model-progress-wrap"><div class="progress-bar" id="model-progress"></div></div>
+              <p id="model-progress-text" class="muted small"></p>
+              <p id="model-manual-note" class="muted small hidden">Manual download: Kokoro-82M ki files (<b>kokoro-v1.0.onnx</b> aur <b>voices-v1.0.bin</b>) <a href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank" rel="noopener">Hugging Face — hexgrad/Kokoro-82M</a> se le kar is project ke <b>models/</b> folder mein rakhein, phir server restart karein. Details README mein hain.</p>
+            </div>
+            <div class="card">
+              <h2>Settings</h2>
+              <label for="speed">Speed (Kokoro): <span id="speed-val">1.0×</span></label>
               <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
+              <p class="muted small">Speed is the only TTS setting the Kokoro engine supports here — there is no Stability or Similarity control in this build.</p>
             </div>
           </div>
-          <div class="row actions">
-            <button id="generate">Generate audio</button>
-            <a id="download" class="btn hidden" href="#" download="awaazai.wav">Download WAV</a>
-          </div>
-          <p id="msg" class="muted" role="status"></p>
-          <audio id="player" controls class="hidden"></audio>
-          <p class="muted small">Sample: <a href="/sample.wav" download>sample.wav</a> (generated with this same engine, voice af_heart).</p>
-          <p class="muted small">Bina login ke bhi TTS demo try kar sakte hain — <span id="demo-left">5 demo generations</span> is browser session mein.</p>
         </div>
+      </section>
+
+      <!-- VOICES -->
+      <section class="page" id="page-voices" data-page="voices">
         <div class="card">
-          <h3>Recent TTS</h3>
-          <ul id="tts-recent" class="list"><li class="muted">Login karein to recent TTS generations dikhengi.</li></ul>
+          <h2>Voices</h2>
+          <p class="muted">Kokoro library voices and your saved cloned voices, in one place.</p>
+          <div class="tabs" role="tablist" aria-label="Voice lists">
+            <button class="tab active" data-tab="library" role="tab" aria-selected="true">Library</button>
+            <button class="tab" data-tab="mine" role="tab" aria-selected="false">My Voices</button>
+            <button class="tab" data-tab="add" role="tab" aria-selected="false">Add Voice</button>
+          </div>
+        </div>
+        <div class="card" id="voices-panel-library">
+          <h2>Library — 54 Kokoro voices</h2>
+          <label for="library-search">Search library voices</label>
+          <input type="text" id="library-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
+          <div class="chips" id="library-gender-filters" role="group" aria-label="Filter library voices by gender">
+            <button class="chip active" data-gender="all">All</button>
+            <button class="chip" data-gender="female">Female</button>
+            <button class="chip" data-gender="male">Male</button>
+          </div>
+          <div id="library-grid" class="voice-grid" role="listbox" aria-label="Library voices"><p class="muted">Loading voices…</p></div>
+          <div id="library-error" class="error-box hidden">
+            <p class="muted" id="library-error-text">Voices load nahi hui.</p>
+            <button id="library-retry" class="btn secondary small">Retry loading voices</button>
+          </div>
+        </div>
+        <div class="card hidden" id="voices-panel-mine">
+          <h2>My Voices — saved cloned voices</h2>
+          <p class="muted">Save ki hui awazein yahan dikhengi. Kisi awaz ko clone section mein chunein to dobara upload nahi karna parega.</p>
+          <label for="voices-search">Search saved voices</label>
+          <input type="text" id="voices-search" placeholder="Voice ka naam likhein…">
+          <div id="voices-list" class="voice-grid"><p class="muted">Login karein to saved voices dikhengi.</p></div>
+          <div id="voices-empty" class="empty-state hidden">
+            <p class="muted">Abhi koi saved voice nahi hai.</p>
+            <button id="voices-empty-cta" data-goto="clone">Clone your first voice</button>
+          </div>
+        </div>
+        <div class="card hidden" id="voices-panel-add">
+          <h2>Add Voice</h2>
+          <p class="muted">A new voice starts with the cloning wizard: upload a 3–30 second reference recording, write text, confirm consent, and generate. Cloning needs login (10 credits per clone).</p>
+          <div class="row actions">
+            <button data-goto="clone">Open Voice Cloning wizard</button>
+          </div>
         </div>
       </section>
 
       <!-- VOICE CLONING -->
       <section class="page" id="page-clone" data-page="clone">
-        <div class="demo card">
+        <div class="card">
           <h2>Voice Cloning — apni awaz ki copy</h2>
           <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B Base. Cloning ke liye login zaroori hai (10 credits per clone). <span id="clone-status" class="muted">Checking cloning engine…</span></p>
           <ol class="wizard-steps" id="clone-steps">
-            <li><span class="step-num">1</span><span>Upload reference</span></li>
-            <li><span class="step-num">2</span><span>Text</span></li>
-            <li><span class="step-num">3</span><span>Language + consent</span></li>
-            <li><span class="step-num">4</span><span>Generate</span></li>
+            <li data-step="1"><span class="step-num">1</span><span>Upload reference</span></li>
+            <li data-step="2"><span class="step-num">2</span><span>Text</span></li>
+            <li data-step="3"><span class="step-num">3</span><span>Language + consent</span></li>
+            <li data-step="4"><span class="step-num">4</span><span>Generate</span></li>
           </ol>
           <div id="clone-engine-card" class="engine-card">
             <b>Cloning engine:</b> <span id="clone-engine-state">Checking…</span>
@@ -205,10 +272,11 @@
                 <option value="pt">Portuguese</option>
                 <option value="es">Spanish</option>
                 <option value="it">Italian</option>
-                <option value="ur">Urdu — not supported by Qwen (see Phase 0 test)</option>
+                <option value="ur">Urdu — not supported by Qwen (see note below)</option>
               </select>
             </div>
           </div>
+          <p class="muted small"><b>Urdu note:</b> Qwen3-TTS Urdu support nahi karta — Urdu choose karne par backend 422 error dega. Urdu ke liye Fish Speech ka test abhi shuru nahi hua.</p>
           <label class="consent"><input type="checkbox" id="consent"> Ye meri apni awaz hai, ya is awaz ko clone karne ki mujhe explicit permission hai. Bina ijazat kisi aur ki awaz clone karna mana hai.</label>
           <div class="row actions">
             <button id="clone-btn">Clone voice &amp; generate</button>
@@ -228,26 +296,17 @@
         </div>
       </section>
 
-      <!-- MY VOICES -->
-      <section class="page" id="page-voices" data-page="voices">
-        <div class="card">
-          <h2>My Voices — saved cloned voices</h2>
-          <p class="muted">Save ki hui awazein yahan dikhengi. Kisi awaz ko clone section mein chunein to dobara upload nahi karna parega.</p>
-          <label for="voices-search">Search saved voices</label>
-          <input type="text" id="voices-search" placeholder="Voice ka naam likhein…">
-          <div id="voices-list" class="voice-grid"><p class="muted">Login karein to saved voices dikhengi.</p></div>
-          <div id="voices-empty" class="empty-state hidden">
-            <p class="muted">Abhi koi saved voice nahi hai.</p>
-            <button id="voices-empty-cta" data-goto="clone">Clone your first voice</button>
-          </div>
-        </div>
-      </section>
-
       <!-- DUBBING -->
       <section class="page" id="page-dub" data-page="dub">
-        <div class="demo card">
+        <div class="card">
           <h2>Dubbing — aik awaz, doosri zuban</h2>
           <p class="muted">Audio upload karo — pehle transcribe hoga, phir translate, phir chosen voice mein dub hoga. Login zaroori hai (20 credits per dub). <b>Honest note:</b> cross-language translation ke liye argos-translate abhi installed nahi hai, is liye filhal same-language dub kaam karta hai (jaise English audio ko doosri Kokoro voice mein dobara bolna). Agar translation pair missing ho to 501 error ke sath transcript phir bhi milega, credits nahi katenge.</p>
+          <ol class="wizard-steps" id="dub-steps">
+            <li data-step="1" class="active"><span class="step-num">1</span><span>Upload</span></li>
+            <li data-step="2"><span class="step-num">2</span><span>Settings</span></li>
+            <li data-step="3"><span class="step-num">3</span><span>Generate</span></li>
+            <li data-step="4"><span class="step-num">4</span><span>Result</span></li>
+          </ol>
           <div class="dropzone" id="dub-drop">
             <label for="dub-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
             <input type="file" id="dub-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
@@ -292,11 +351,11 @@
           <div id="dub-result" class="hidden">
             <div class="split-panels">
               <div class="panel-box">
-                <h4>Transcript <span id="dub-src-lang" class="pill hidden"></span></h4>
+                <h3>Transcript <span id="dub-src-lang" class="pill hidden"></span></h3>
                 <p id="dub-transcript"></p>
               </div>
               <div class="panel-box">
-                <h4>Translation</h4>
+                <h3>Translation</h3>
                 <p id="dub-translation"></p>
               </div>
             </div>
@@ -307,9 +366,17 @@
 
       <!-- STUDIO -->
       <section class="page" id="page-studio" data-page="studio">
-        <div class="demo card">
+        <div class="card">
           <h2>Studio — lambi narration, aik file</h2>
           <p class="muted">5000 characters tak lamba text likhein — Studio sentence boundaries par chunks mein baant kar aik hi WAV banayega, chapter markers (har chunk ka start time) ke sath. Login zaroori hai, cost TTS rate par hai (1 credit per 100 characters).</p>
+          <ol class="wizard-steps" id="studio-steps">
+            <li data-step="1" class="active"><span class="step-num">1</span><span>Project</span></li>
+            <li data-step="2"><span class="step-num">2</span><span>Text &amp; voice</span></li>
+            <li data-step="3"><span class="step-num">3</span><span>Generate</span></li>
+            <li data-step="4"><span class="step-num">4</span><span>Listen</span></li>
+          </ol>
+          <label for="studio-title">Project title</label>
+          <input type="text" id="studio-title" placeholder="My narration project" maxlength="80" value="My narration project">
           <label for="studio-text">Text <span class="muted">(max 5000 characters)</span></label>
           <textarea id="studio-text" rows="8" maxlength="5000">Chapter one. Welcome to AwaazAI Studio. This is a long-form narration test, where a big piece of text becomes one single audio file. Chapter two. Each sentence becomes part of a chapter, so you can jump to any part of the recording. Chapter three. The Studio splits text at sentence boundaries, speaks every chunk in the same voice, and joins them together without gaps.</textarea>
           <p class="muted small"><span id="studio-count">0/5000</span> · <span id="studio-words">0 words</span> · <span id="studio-cost-preview"></span></p>
@@ -319,7 +386,7 @@
               <select id="studio-voice"><option value="af_heart">Heart — warm female</option></select>
             </div>
             <div class="field">
-              <label for="studio-speed">Speed: <span id="studio-speed-val">1.0×</span></label>
+              <label for="studio-speed">Speed (Kokoro): <span id="studio-speed-val">1.0×</span></label>
               <input type="range" id="studio-speed" min="0.5" max="2" step="0.1" value="1">
             </div>
           </div>
@@ -329,22 +396,31 @@
           </div>
           <p id="studio-msg" class="muted" role="status"></p>
           <p class="muted small">Generated audio login hone par aap ki history mein save hota hai.</p>
-          <ul id="studio-chapters" class="list"></ul>
-          <audio id="studio-player" controls class="hidden"></audio>
+          <div id="studio-result" class="hidden">
+            <h3 id="studio-result-title">Chapters</h3>
+            <ul id="studio-chapters" class="list"></ul>
+            <audio id="studio-player" controls class="hidden"></audio>
+          </div>
         </div>
       </section>
 
       <!-- SPEECH-TO-TEXT -->
       <section class="page" id="page-stt" data-page="stt">
-        <div class="demo card">
+        <div class="card">
           <h2>Speech-to-Text — audio se transcript</h2>
           <p class="muted">Audio upload karo — faster-whisper (tiny model, CPU) transcript banayega, detected language aur timestamps ke sath. Free hai; login ho to history mein save hota hai.</p>
+          <ol class="wizard-steps" id="stt-steps">
+            <li data-step="1" class="active"><span class="step-num">1</span><span>Upload</span></li>
+            <li data-step="2"><span class="step-num">2</span><span>Transcribe</span></li>
+            <li data-step="3"><span class="step-num">3</span><span>Result</span></li>
+          </ol>
           <div class="dropzone" id="stt-drop">
             <label for="stt-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
             <input type="file" id="stt-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
             <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
             <p id="stt-file-info" class="muted small" role="status"></p>
           </div>
+          <p class="muted small">Language: auto-detect — engine khud pehchanega ke audio kis zuban mein hai. Settings: no extra options — faster-whisper tiny, CPU.</p>
           <div class="row actions">
             <button id="stt-btn">Transcribe</button>
             <button id="stt-copy" class="btn secondary hidden">Copy transcript</button>
@@ -378,6 +454,7 @@
           <div id="history-list" class="history-list"><p class="muted">Login karein to history dikhegi.</p></div>
           <div id="history-empty" class="empty-state hidden">
             <p class="muted">Is filter mein koi history nahi hai.</p>
+            <button data-goto="tts">Generate your first audio</button>
           </div>
         </div>
       </section>
@@ -385,10 +462,10 @@
       <!-- ACCOUNT -->
       <section class="page" id="page-account" data-page="account">
         <div class="card hidden" id="profile-card">
-          <h3>Profile</h3>
+          <h2>Profile</h2>
           <p><b id="profile-name">—</b></p>
           <p class="muted">Member since: <span id="profile-since">—</span></p>
-          <p class="muted">Credits balance: <b id="profile-credits">—</b></p>
+          <p class="muted">Credits balance: <b id="profile-credits">0</b></p>
         </div>
         <div class="card">
           <h2>Account — login / signup</h2>
@@ -415,7 +492,12 @@
           <p id="auth-logged" class="muted hidden"></p>
         </div>
         <div class="card">
-          <h3>Change password</h3>
+          <h2>Credits &amp; usage</h2>
+          <p class="muted">Credits balance: <b id="usage-credits">0</b> · Generations: <b id="usage-generations">0</b> · Saved voices: <b id="usage-voices">0</b></p>
+          <p class="muted small">Pricing: TTS 1 credit per 100 characters, Clone 10 credits, Dub 20 credits, Studio at the TTS rate. STT is free.</p>
+        </div>
+        <div class="card">
+          <h2>Change password</h2>
           <p class="muted">Current password aur naya password likhein.</p>
           <div class="row">
             <div class="field">
@@ -433,7 +515,7 @@
           <p id="pw-msg" class="muted" role="status"></p>
         </div>
         <div class="card">
-          <h3>Updates</h3>
+          <h2>Updates</h2>
           <p class="muted">Naya version GitHub se check karein. Update hone par server ko restart karna parta hai — button khud server restart nahi karta, ye imaandari se bataya jata hai.</p>
           <div class="row actions">
             <button id="update-check-btn" class="btn secondary">Check for updates</button>
@@ -442,8 +524,23 @@
           </div>
           <p id="update-msg-account" class="muted" role="status"></p>
         </div>
+        <div class="card">
+          <h2>Models</h2>
+          <p class="muted" id="models-state-text">Checking model status…</p>
+          <div class="row actions">
+            <button id="models-download-btn" class="btn secondary">Download Kokoro models (~338 MB)</button>
+          </div>
+          <div class="progress hidden" id="models-progress-wrap"><div class="progress-bar" id="models-progress"></div></div>
+          <p id="models-progress-text" class="muted small"></p>
+        </div>
+        <div class="card">
+          <h2>About</h2>
+          <p class="muted">AwaazAI version: <b id="about-version">Loading…</b></p>
+          <p class="muted" id="about-engines">Engines: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
+          <p class="muted small">Local-first · no cloud · CPU-friendly. No real payment is wired up yet — credits purchase is Coming Soon.</p>
+        </div>
         <div class="card danger-zone">
-          <h3>Danger zone</h3>
+          <h2>Danger zone</h2>
           <p class="muted">Logout karne par is browser ki session khatam ho jayegi — history aur saved voices dobara login par wapas milengi.</p>
           <div class="row actions">
             <button id="logout-btn-2" class="btn secondary">Logout</button>
@@ -451,10 +548,6 @@
         </div>
       </section>
     </main>
-
-    <footer>
-      <p>AwaazAI v0.6.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
-    </footer>
   </div>
 </div>
 <script src="app.js"></script>
