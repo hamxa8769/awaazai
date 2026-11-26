@@ -53,7 +53,7 @@ from backend import (accounts, clone_engine, fish_speech, models_downloader,
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 app = FastAPI(title="AwaazAI", version=VERSION)
 

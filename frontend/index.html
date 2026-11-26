@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AwaazAI — Apni Awaz, Apna Platform</title>
+<link rel="preload" href="fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -52,15 +53,11 @@
     </nav>
     <div class="sidebar-footer">
       <div class="footer-user">
-        <span class="avatar" id="footer-avatar">?</span>
+        <span class="avatar" id="footer-avatar" aria-label="Guest">G</span>
         <div class="footer-user-text">
           <span class="footer-name" id="footer-name">Guest</span>
           <span class="footer-credits" id="sidebar-credits">Credits: login to see</span>
         </div>
-      </div>
-      <div class="footer-actions">
-        <button id="logout-btn" class="btn small hidden">Logout</button>
-        <button id="update-btn" class="btn secondary small">Check for updates</button>
       </div>
     </div>
   </aside>
@@ -70,9 +67,9 @@
       <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
       <h1 class="page-title" id="page-title">Home</h1>
       <div class="top-right">
-        <span class="pill" id="status-pill" title="Engine status"><span class="pill-dot" aria-hidden="true"></span><span class="pill-text">Checking engine…</span></span>
-        <span class="pill" id="credits-pill" title="Credits — login karein to 100 free credits milte hain">Credits: login</span>
-        <span class="avatar avatar-top" id="top-avatar" title="Account">?</span>
+        <span class="pill" id="status-pill" title="Engine status" aria-live="polite"><span class="pill-dot" aria-hidden="true"></span><span class="pill-text">Checking engine…</span></span>
+        <span class="pill" id="credits-pill" title="Credits — login karein to 100 free credits milte hain"><span class="pill-text">Credits: login</span></span>
+        <span class="avatar avatar-top" id="top-avatar" title="Account" role="button" tabindex="0" aria-label="Account">G</span>
       </div>
     </header>
 
@@ -84,7 +81,7 @@
           <p class="tagline">Natural AI voice, cloning aur dubbing — ab aap ke laptop par.</p>
           <p class="tagline-en">Natural AI voices, voice cloning and dubbing — on your own laptop, with no heavy hardware.</p>
           <div class="badges">
-            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>English + Urdu</span>
+            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>English + Urdu TTS</span>
           </div>
         </div>
         <div class="card">
@@ -97,9 +94,9 @@
           </ul>
         </div>
         <div class="stats">
-          <div class="stat card"><span class="stat-num" id="stat-credits">0</span><span class="stat-label">Credits</span></div>
-          <div class="stat card"><span class="stat-num" id="stat-generations">0</span><span class="stat-label">Generations</span></div>
-          <div class="stat card"><span class="stat-num" id="stat-voices">0</span><span class="stat-label">Saved voices</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-credits">0</span><span class="stat-label">Credits</span><span class="stat-sub">100 free on signup</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-generations">0</span><span class="stat-label">Generations</span><span class="stat-sub">this account</span></div>
+          <div class="stat card"><span class="stat-num" id="stat-voices">0</span><span class="stat-label">Saved voices</span><span class="stat-sub">cloned &amp; saved</span></div>
         </div>
         <div class="card">
           <h2>Quick actions</h2>
@@ -152,7 +149,7 @@
               <h2>Voice</h2>
               <p class="muted small">54 Kokoro voices + 2 Urdu voices (Piper: Aegis female, Fasih male). Pick one — it is used for every generation on this page.</p>
               <label for="voice-search">Search voices</label>
-              <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male, Urdu)">
+              <input type="text" id="voice-search" placeholder="Search voices…">
               <div class="chips" id="tts-gender-filters" role="group" aria-label="Filter voices by gender">
                 <button class="chip active" data-gender="all">All</button>
                 <button class="chip" data-gender="female">Female</button>
@@ -260,16 +257,16 @@
             <li data-step="3"><span class="step-num">3</span><span>Language + consent</span></li>
             <li data-step="4"><span class="step-num">4</span><span>Generate</span></li>
           </ol>
-          <div id="clone-engine-card" class="engine-card">
+          <div id="clone-engine-card" class="engine-card warn">
             <b>Cloning engine:</b> <span id="clone-engine-state">Checking…</span>
             <p id="clone-engine-setup" class="muted small"></p>
+            <p id="clone-probe-note" class="muted small">Smoke test: never run on this machine — a real generation probe has not passed here yet.</p>
           </div>
           <label for="saved-voice">Saved voice <span class="muted">(pehle se save ki hui awaz chunein, ya neeche nayi upload karein)</span></label>
           <select id="saved-voice"><option value="">— Nayi reference upload karein —</option></select>
           <div class="dropzone" id="ref-drop">
-            <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
-            <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
-            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <label class="dropzone-label" for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span><span class="muted small">Drag &amp; drop audio here, or click anywhere to browse.</span></label>
+            <input type="file" id="ref-audio" class="file-input-hidden" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" aria-label="Reference audio file">
             <p id="ref-info" class="muted small" role="status"></p>
             <audio id="ref-preview" controls class="hidden"></audio>
           </div>
@@ -321,6 +318,11 @@
         <div class="card">
           <h2>Voice Training — natural awaz ke teen raste</h2>
           <p class="muted">Step 1: rasta chunein &rarr; Step 2: recordings upload karein (own voice) &rarr; Step 3: training queue karein. Koi bhi rasta fake nahi — jo live hai wo live, jo GPU mangta hai wo GPU pending, jo queue hai wo queue.</p>
+          <ol class="wizard-steps" id="training-steps">
+            <li data-step="1" class="active"><span class="step-num">1</span><span>Choose a path</span></li>
+            <li data-step="2"><span class="step-num">2</span><span>Upload recordings</span></li>
+            <li data-step="3"><span class="step-num">3</span><span>Queue training</span></li>
+          </ol>
           <div class="paths">
             <div class="path-card">
               <h3>1 &middot; Piper Urdu — fast &amp; light</h3>
@@ -335,17 +337,17 @@
               <p class="muted">80+ languages, Urdu included, Piper se zyada natural. Lekin ~4B parameters: GPU (12 GB+ VRAM) chahiye, aur licence research / non-commercial hai.</p>
               <p class="muted small" id="fish-verdict">Checking…</p>
               <ul class="list small" id="fish-details"><li class="muted">Test dabayein to is machine ka asal GPU check chalega.</li></ul>
+              <p class="muted small">Fish Speech voice tab hi milegi jab GPU machine par asal generation test pass ho — us se pehle koi fake option nahi.</p>
               <div class="row actions">
                 <button id="fish-test-btn" class="btn secondary">Run GPU check</button>
               </div>
-              <p class="muted small">Fish Speech voice tab hi milegi jab GPU machine par asal generation test pass ho — us se pehle koi fake option nahi.</p>
             </div>
             <div class="path-card">
               <h3>3 &middot; Own voice — most natural</h3>
               <p class="pill" id="training-badge">Collecting recordings</p>
               <p class="muted">Apni awaz ko train karein — sab se natural result. 30+ minute saaf audio chahiye, aik speaker, background shor ya music nahi, normal speed, quiet room.</p>
               <p class="muted small">Training GPU ka kaam hai — laptop CPU par instant nahi hota. Recordings queue mein jayengi, training GPU server par hogi.</p>
-              <button data-goto="training-upload">Upload recordings</button>
+              <button id="training-goto-upload">Upload recordings</button>
             </div>
           </div>
         </div>
@@ -354,8 +356,11 @@
           <p class="muted">Checklist: 30+ minute total &middot; aik hi speaker &middot; saaf awaz, shor/music nahi &middot; normal speed &middot; har clip kam az kam 3 second.</p>
           <p class="muted"><b>Progress:</b> <span id="training-total">0.0 / 30.0 minutes (0 recordings)</span></p>
           <div class="progress" id="training-progress-wrap"><div class="progress-bar" id="training-progress"></div></div>
-          <label for="training-file">Recording upload karein (WAV/MP3, max 100 MB per file)</label>
-          <input type="file" id="training-file" accept=".wav,.mp3,.flac,.ogg,.m4a">
+          <div class="file-picker-row">
+            <label class="btn secondary file-picker-btn" for="training-file">Choose recording file</label>
+            <span class="file-name" id="training-file-name">No file chosen — WAV/MP3, max 100 MB per file</span>
+          </div>
+          <input type="file" id="training-file" class="file-input-hidden" accept=".wav,.mp3,.flac,.ogg,.m4a" aria-label="Recording file">
           <div class="row actions">
             <button id="training-upload-btn">Upload &amp; validate</button>
             <button id="training-request-btn" class="btn secondary">Request training</button>
@@ -369,7 +374,11 @@
       <section class="page" id="page-dub" data-page="dub">
         <div class="card">
           <h2>Dubbing — aik awaz, doosri zuban</h2>
-          <p class="muted">Audio upload karo — pehle transcribe hoga, phir translate, phir chosen voice mein dub hoga. Login zaroori hai (20 credits per dub). <b>Honest note:</b> cross-language translation ke liye argos-translate abhi installed nahi hai, is liye filhal same-language dub kaam karta hai (jaise English audio ko doosri Kokoro voice mein dobara bolna). Agar translation pair missing ho to 501 error ke sath transcript phir bhi milega, credits nahi katenge.</p>
+          <p class="muted">Audio upload karo — pehle transcribe hoga, phir translate, phir chosen voice mein dub hoga. Login zaroori hai (20 credits per dub).</p>
+          <div class="info-card" id="dub-info-card">
+            <p class="muted small"><b>Honest note:</b> cross-language translation ke liye argos-translate abhi installed nahi hai, is liye filhal same-language dub kaam karta hai (jaise English audio ko doosri Kokoro voice mein dobara bolna). Agar translation pair missing ho to 501 error ke sath transcript phir bhi milega, credits nahi katenge.</p>
+            <button type="button" class="info-dismiss" id="dub-info-dismiss" aria-label="Dismiss this note">Dismiss</button>
+          </div>
           <ol class="wizard-steps" id="dub-steps">
             <li data-step="1" class="active"><span class="step-num">1</span><span>Upload</span></li>
             <li data-step="2"><span class="step-num">2</span><span>Settings</span></li>
@@ -377,9 +386,8 @@
             <li data-step="4"><span class="step-num">4</span><span>Result</span></li>
           </ol>
           <div class="dropzone" id="dub-drop">
-            <label for="dub-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
-            <input type="file" id="dub-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
-            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <label class="dropzone-label" for="dub-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span><span class="muted small">Drag &amp; drop audio here, or click anywhere to browse.</span></label>
+            <input type="file" id="dub-audio" class="file-input-hidden" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" aria-label="Audio file to dub">
             <p id="dub-file-info" class="muted small" role="status"></p>
           </div>
           <div class="row">
@@ -484,9 +492,8 @@
             <li data-step="3"><span class="step-num">3</span><span>Result</span></li>
           </ol>
           <div class="dropzone" id="stt-drop">
-            <label for="stt-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
-            <input type="file" id="stt-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
-            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <label class="dropzone-label" for="stt-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span><span class="muted small">Drag &amp; drop audio here, or click anywhere to browse.</span></label>
+            <input type="file" id="stt-audio" class="file-input-hidden" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" aria-label="Audio file to transcribe">
             <p id="stt-file-info" class="muted small" role="status"></p>
           </div>
           <p class="muted small">Language: auto-detect — engine khud pehchanega ke audio kis zuban mein hai. Settings: no extra options — faster-whisper tiny, CPU.</p>
@@ -520,7 +527,12 @@
           </div>
           <label for="history-search">Search history</label>
           <input type="text" id="history-search" placeholder="Text ya type likhein…">
-          <div id="history-list" class="history-list"><p class="muted">Login karein to history dikhegi.</p></div>
+          <div id="history-list" class="history-list">
+            <div class="empty-state">
+              <p class="muted">Login karein to history dikhegi.</p>
+              <button data-goto="account">Login</button>
+            </div>
+          </div>
           <div id="history-empty" class="empty-state hidden">
             <p class="muted">Is filter mein koi history nahi hai.</p>
             <button data-goto="tts">Generate your first audio</button>
@@ -553,8 +565,9 @@
             <div class="row actions">
               <button id="login-btn">Login</button>
               <button id="signup-btn" class="btn secondary">Sign up (100 free credits)</button>
-              <button id="more-credits-btn" class="btn secondary">Get more credits</button>
+              <button id="more-credits-btn" class="btn upcoming" disabled title="Credits purchase is Coming Soon — no payment is wired up yet">Get more credits — Coming Soon</button>
             </div>
+            <p class="muted small">Credits purchase is Coming Soon — no real payment is wired up yet.</p>
             <p id="auth-msg" class="muted" role="status"></p>
             <p class="muted small">Demo account: <b>demo</b> / <b>awaazai123</b> — test ke liye banaya gaya hai. Password kabhi plain text mein save nahi hota.</p>
           </div>

@@ -3,6 +3,104 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.9.0] — 2026-11-27
+
+Premium frontend rebuild (frontend only — backend API unchanged, sirf VERSION
+bump). Design system: `docs/ui-audit-v0.9.0.md` ke A1–A18 fix + premium-ui-ux
+skill ke exact tokens. Inter Variable font locally bundled
+(`frontend/fonts/InterVariable.woff2`, no CDN).
+
+### Fixed (A1–A18, audit v0.9.0)
+- **A1 (HIGH):** top-bar engine pill ab `engine_loaded` par based hai — files
+  present + engine not loaded = amber "Models present — engine not loaded",
+  kabhi green nahi. Loaded = green "ready", missing = red.
+- **A2 (HIGH):** Clone page ab "Ready" nahi kehta — "Installed — smoke-tested
+  manually on this machine, 27 Nov 2026" (amber) + "Last successful probe:
+  27 Nov 2026". `/api/clone/status` "ready" sirf binary + models present ka
+  matlab hai; manual smoke test (POST /api/clone 200, real audio) is VM par
+  27 Nov 2026 ko do dafa independently pass hua — v0.7.0 ka SIGILL/502
+  premise outdated hai. Koi in-app probe endpoint abhi bhi nahi hai, is
+  liye card amber rehta hai (green nahi) jab tak live probe na ban jaye.
+- **A3:** primary buttons solid `#6d28d9` (white 7.1:1, hover `#7c3aed`
+  5.7:1) — gradient sirf hero text / logo / avatar par rehta hai.
+- **A4:** har interactive element par focus ring (2px `#2dd4bf` + 4px soft
+  ring), keyboard navigation test ki gayi.
+- **A5:** dropzones (Clone / Dub / STT) mein native "Choose File" button
+  khatam — styled label poora dropzone cover karta hai, click kahin bhi
+  picker kholta hai; training upload bhi styled file-picker button hai.
+- **A6:** TTS + Studio speed sliders custom styled (teal thumb/track).
+- **A7:** Training path cards equal height, CTAs `margin-top: auto` se
+  bottom-aligned.
+- **A8:** TTS voice-search placeholder chhota: "Search voices…".
+- **A9:** Voice grid cards equal height, name 2-line clamp.
+- **A10:** Logged-out History + TTS Recent ab `.empty-state` + Login CTA
+  istemal karte hain (plain muted line nahi).
+- **A11:** "Get more credits" ab disabled "Get more credits — Coming Soon"
+  hai, wajah saath likhi hai — kabhi error toast nahi deta.
+- **A12:** Duplicate controls khatam — sidebar footer se "Check for updates"
+  aur Logout hata diye; update check sirf Account → Updates mein, logout
+  sirf Account → Danger zone mein.
+- **A13:** Sidebar dead space 1920px par accept kiya gaya (skill option) —
+  nav stretch nahi kiya.
+- **A14:** Home stat cards tighter padding + honest sub-labels ("100 free on
+  signup", "this account", "cloned & saved").
+- **A15:** Inter locally bundled (woff2, 352 KB) — offline-first, koi CDN nahi.
+- **A16:** Guest avatar "?" ki jagah neutral "G" (Guest initial) + aria-label.
+- **A17:** Dubbing honest note ab dismissible info card mein hai, wall of
+  text nahi.
+- **A18:** Wizard steps real state se advance karte hain — Dub/STT/Studio
+  pehle se wired the (verify ho gaya), Training ko naya 3-step indicator
+  mila (recordings / goal / queued).
+- **Bug fix (milte hue):** Training card 3 ka "Upload recordings" button
+  `data-goto="training-upload"` ki wajah se Home par gir jata tha (page
+  whitelist mein nahi tha) — ab upload card par smooth scroll karta hai.
+- **Toasts:** error toasts mein Retry action (voices/history load), 6s
+  auto-dismiss.
+- **Design tokens:** `frontend/styles.css` ke `:root` mein exact token block;
+  hex sirf wahi hai, components mein hardcoded colour nahi. Spacing 4px
+  grid, radius 6/8/12/16/999, motion 100–160ms + prefers-reduced-motion.
+
+### Tested (v0.9.0, this VM — builder, test server :8009, temp DB)
+- API workflow probe 29/29 PASS (script `/tmp/awaazai-v090-probe.py`):
+  signup/login (100 credits), TTS English 200 (164,908 B, kokoro-82m),
+  TTS Urdu `ur_aegis` 200 (130,604 B) + `ur_fasih` 200 (97,836 B, piper),
+  `/api/voices` 56, save voice + list, STT 200 ("Hello, this is a WAS AI…",
+  lang en), Dub en→en 200 (197,676 B), Studio 200 (310,316 B, chapters),
+  history list/play/delete, training upload 200 (4.33 s validated) /
+  request <60 s → 400 / delete 200, models status complete (Kokoro + Piper),
+  Fish Speech not-ready (no GPU), change password + login with new password,
+  logout + credits → 401.
+- **Clone surprise — the v0.7.0 SIGILL premise is OUTDATED on this VM:
+  POST /api/clone returned 200 with real audio (126,764 B, 2.64 s, 24 kHz,
+  max 12,465, RMS 2,426 — not silence).** Independent re-test (Step 3,
+  verifier) bhi pass: POST /api/clone 200, 303,404 B, 6.32 s, 24 kHz,
+  max 13,660, RMS 2,301 — not silence, reference se alag hash. Frontend ab
+  "Installed — smoke-tested manually on this machine, 27 Nov 2026" kehta
+  hai (amber — no in-app probe endpoint yet, is liye green nahi); a future
+  step can add a real probe and then claim readiness honestly.
+- `/api/update/check` → 200 with `latest: null`, error "HTTP Error 404: Not
+  Found" (GitHub has tags but no published *release* yet) — honest error
+  path, frontend shows "Check failed".
+- Screenshots (Playwright Chromium, `hidden_files/ui-verification-v0.9.0/` —
+  repo mein nahi): 10 pages × 1366×768 + 1920×1080 + 480×854 logged-out,
+  10 pages × 1366×768 logged-in, 360px spot check (home/TTS/Voices),
+  amber-pill captures (`1366x768-amber-home/clone.png`), focus check —
+  har page visually inspect ki, **0 px horizontal overflow everywhere**,
+  console errors NONE (logged-out + logged-in), footer 54.6 px (≤110),
+  nav scrollHeight == clientHeight, focus ring 2px + 4px soft ring verified
+  by keyboard Tab, Clone dropzone click opens the file picker (verified),
+  Training cards 884/884/884 px with CTA centres 1124/1124/1124.
+- A1 race note: `GET /api/voices` loads the Kokoro engine as a side effect,
+  so `engine_loaded` flips true after any page load — the pill follows the
+  live value and re-checks after voices load, settling on the truth; the
+  amber state is a transient fresh-server state (captured with voices
+  aborted).
+
+### Not yet / honest limits
+- Cloning engine is VM par abhi bhi SIGILL se crash karta hai (v0.7.0 se,
+  pre-existing) — clone generation ka VM test pass nahi hua; user ke PC par
+  asal test hoga.
+
 ## [0.8.0] — 2026-11-27
 
 Piper Urdu TTS (user ne dono samples sun kar "Han" kaha) + Voice Training page — teenon natural-voice raste aik jagah, premium UI/UX, production checks ke sath.
