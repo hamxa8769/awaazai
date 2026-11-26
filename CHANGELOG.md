@@ -3,6 +3,51 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.2.1] — 2026-11-26
+
+Voice cloning engine ab asal mein chalta hai (patch — koi API change nahi).
+
+### Fixed
+- **v0.2.0 ki ghalti: CustomVoice talker cloning nahi kar sakta.**
+  qwentts.cpp ka `--ref-wav` sirf Base models ke liye hai; CustomVoice
+  sirf 9 named speakers (`--speaker`) deta hai. Pehla clone test is
+  liye 502 par fail hua (`custom_voice models require --speaker`,
+  14.5 s). Fix: Base 0.6B talker (`qwen-talker-0.6b-base-Q8_0.gguf`)
+  download karke `backend/clone_engine.py` us par switch kiya; code,
+  API header, frontend aur README mein "CustomVoice" labels ko "Base"
+  se correct kiya.
+- **Build note:** `buildcpu.sh` ka `-DGGML_BLAS=ON` is VM par fail hota
+  hai (BLAS dev files nahi hain, sirf runtime lib) — bina BLAS ke
+  configure kiya, `-j2` build clean (exit 0). CPU backend OpenMP ke
+  sath chalta hai.
+
+### Added
+- English clone test **PASS** — user ki approval (2026-11-26 ~16:37 PKT)
+  ke baad qwentts.cpp build hua aur API se real clone bana:
+  `POST /api/clone` → HTTP 200 in 30.2 s, `samples/v0.2.0/en-clone.wav`
+  (5.44 s, 24 kHz, RMS 0.073, SHA-256 `8853aba6…e285` — reference aur
+  Kokoro sample dono se alag, genuine new generation). CLI se bhi
+  verify hua (exit 0, 28 s, 5.36 s audio, RTF 4.256 on CPU).
+- `docs/phase0-urdu-tests.md` updated — English clone PASS, pehli
+  failure + fix honestly recorded.
+- Qwen weights (gitignored, not committed): Base talker Q8_0
+  (sha256 `d54dbaf1…426`) + tokenizer Q8_0. CustomVoice talker bhi disk
+  par hai (unused, cloning ke liye zaroori nahi).
+
+### Tested (v0.2.1 server, this VM)
+- `GET /api/health` → 200, cloning "ready"; `GET /api/voices` → 54;
+  `POST /api/tts` → 200, real Kokoro WAV — TTS regression pass.
+- Clone: no consent → 400; `language=ur` → 422; valid English clone →
+  200 (upar dekhein). Voice-match ko kaan se sunna baaki hai — user
+  `en-clone.wav` sun kar judge karein (objective checks: real synthesis,
+  duration, speech-like loudness, distinct hash).
+- CPU speed: ~30 s per ~5.4 s clone (RTF ~4.3× slower than real time);
+  GPU server par seconds mein hoga.
+
+### Not yet
+- Urdu cloning (Fish Speech GPU test, Phase 2 — user ka faisla baaki),
+  login/history, credits, dubbing/Studio.
+
 ## [0.2.0] — 2026-11-26
 
 Voice Cloning (code + UI + API) aur Phase 0 Urdu tests.

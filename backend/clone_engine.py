@@ -1,13 +1,16 @@
-"""AwaazAI voice-cloning engine — Qwen3-TTS 0.6B CustomVoice via qwentts.cpp.
+"""AwaazAI voice-cloning engine — Qwen3-TTS 0.6B Base via qwentts.cpp.
 
 Design (honest, no fake audio):
-- The product engine is Qwen3-TTS 0.6B CustomVoice (Apache 2.0,
+- The product engine is Qwen3-TTS 0.6B Base (Apache 2.0,
   commercial-safe). It is run through qwentts.cpp, the MIT-licensed
   C++/GGML port, as a subprocess — no torch/CUDA needed on the server.
   qwentts.cpp runs on CPU (GGML_BACKEND=CPU), CUDA, Metal and Vulkan.
-- Zero-shot cloning: a 3-10 s clean reference clip (+ its transcript
-  when using the Base talker; CustomVoice uses an x-vector speaker
-  encoder and does not need a transcript). No fine-tuning here.
+- Zero-shot cloning: a 3-10 s clean reference clip. The qwen-tts CLI
+  only accepts --ref-wav for Base models ("Base only" in --help);
+  CustomVoice models are 9 named speakers only (--speaker, no
+  reference input) and CANNOT clone from a reference clip — v0.2.0
+  first tried CustomVoice and the CLI refused it with
+  "custom_voice models require --speaker". So cloning uses Base.
 - Urdu is NOT in Qwen3-TTS's 10 supported languages
   (Chinese, English, Japanese, Korean, German, French, Russian,
   Portuguese, Spanish, Italian — see the Qwen model card). A request
@@ -23,12 +26,14 @@ Install (once, on a machine with a GPU or a patient CPU):
     git clone --recurse-submodules https://github.com/ServeurpersoCom/qwentts.cpp.git tools/qwentts.cpp
     cd tools/qwentts.cpp && ./buildcpu.sh        # CPU only; ./buildcuda.sh for NVIDIA
     huggingface-cli download Serveurperso/Qwen3-TTS-GGUF \
-        qwen-talker-0.6b-customvoice-Q8_0.gguf qwen-tokenizer-12hz-Q8_0.gguf \
+        qwen-talker-0.6b-base-Q8_0.gguf qwen-tokenizer-12hz-Q8_0.gguf \
         --local-dir ../../models/qwen
   Binary: tools/qwentts.cpp/build/qwen-tts
-  Weights: models/qwen/qwen-talker-0.6b-customvoice-Q8_0.gguf
+  Weights: models/qwen/qwen-talker-0.6b-base-Q8_0.gguf
            models/qwen/qwen-tokenizer-12hz-Q8_0.gguf
   Both are gitignored (models/, tools/); users download them once.
+  NOTE: the 0.6B CustomVoice talker is NOT used for cloning (named
+  speakers only); it is not downloaded for this feature.
 """
 from __future__ import annotations
 
@@ -42,10 +47,10 @@ import soundfile as sf
 BASE_DIR = Path(__file__).resolve().parent.parent
 QWEN_BIN = BASE_DIR / "tools" / "qwentts.cpp" / "build" / "qwen-tts"
 QWEN_MODELS_DIR = BASE_DIR / "models" / "qwen"
-TALKER = QWEN_MODELS_DIR / "qwen-talker-0.6b-customvoice-Q8_0.gguf"
+TALKER = QWEN_MODELS_DIR / "qwen-talker-0.6b-base-Q8_0.gguf"
 TOKENIZER = QWEN_MODELS_DIR / "qwen-tokenizer-12hz-Q8_0.gguf"
 
-ENGINE = "qwen3-tts-0.6b-customvoice (via qwentts.cpp, GGUF Q8_0)"
+ENGINE = "qwen3-tts-0.6b-base (via qwentts.cpp, GGUF Q8_0)"
 
 # Qwen3-TTS supported languages (model card, 10 languages). Urdu is NOT
 # in this list — see docs/phase0-urdu-tests.md for the Phase 0 verdict.
@@ -122,7 +127,7 @@ def status() -> dict:
         ),
         "setup": (
             "See backend/clone_engine.py docstring: build qwentts.cpp "
-            "(./buildcpu.sh) and download the 0.6B CustomVoice Q8_0 "
+            "(./buildcpu.sh) and download the 0.6B Base Q8_0 "
             "talker + 12Hz tokenizer GGUFs into models/qwen/."
             if state != "ready" else "Engine ready."
         ),
@@ -231,8 +236,9 @@ def clone(ref_path: Path, text: str, language: str, consent: bool) -> tuple[byte
             out_wav = workdir / "clone.wav"
             prompt_file = workdir / "prompt.txt"
             prompt_file.write_text(text, encoding="utf-8")
-            # qwentts.cpp customvoice: x-vector speaker encoder, no
-            # transcript needed. --ref-wav carries the voice.
+            # qwentts.cpp Base: --ref-wav is the x-vector-only zero-shot
+            # clone path (no transcript needed; --ref-text would enable
+            # ICL mode instead). CustomVoice models reject --ref-wav.
             cmd = [
                 str(QWEN_BIN),
                 "--model", str(TALKER),

@@ -79,7 +79,7 @@ async function loadCloneStatus() {
     const r = await fetch("/api/clone/status");
     const d = await r.json();
     cloneStatus.textContent = d.state === "ready"
-      ? "Engine ready — Qwen3-TTS 0.6B CustomVoice."
+      ? "Engine ready — Qwen3-TTS 0.6B Base."
       : `Engine: ${d.state} — cloning is code-ready but the engine is not installed on this server yet (${d.setup || ""})`;
   } catch {
     cloneStatus.textContent = "Cloning engine status: unreachable.";
