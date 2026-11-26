@@ -3,6 +3,32 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.6.0] — 2026-11-26
+
+Baqi saare sections professionally upgrade, ElevenLabs jaisi fully developed + working (user ne v0.5.0 apne PC par dekh kar kaha tha: sidebar to aa gaya, baqi sections bhi professionally upgrade karo).
+
+### Added
+- **In-app Kokoro model downloader (sab se bara working fix):** user ko ab manually model files download nahi karne parte. `GET /api/models/status` (public) — dono files (kokoro-v1.0.onnx + voices-v1.0.bin, kul 353,746,785 bytes) ki state, progress aur `complete`/`engine_ready`. `POST /api/models/download` (sirf 127.0.0.1 / ::1, warna 403) — background thread mein download, `.part` + atomic rename, Range resume (206 → append, 200 → restart), idempotent (already complete/downloading → `started:false`). Frontend: model missing ho to TTS page par "Download Kokoro models (~338 MB)" button + progress bar (har 2 s poll), manual-download note bhi hai. Engine lazy-load karta hai, is liye download ke baad restart ki zaroorat nahi — pill green ho jata hai.
+- **Text to Speech — professional:** voice dropdown ki jagah searchable voice grid/cards (54 voices, naam + gender + language, Heart highlighted, click/keyboard select; hidden `<select id="voice">` sync mein hai). Char counter (x/1000) + credit cost preview, recent TTS (last 3) inline.
+- **Voice Cloning — 4-step wizard:** 1 Upload reference → 2 Text → 3 Language + consent → 4 Generate. Drag-and-drop upload, reference preview player + duration display (3–30 s warning, backend phir bhi validate karta hai), "Use sample.wav as reference" button, engine status card (ready / not-installed + setup steps, kabhi ready ka dawa nahi jab engine na ho). Save voice ab inline naam field se hota hai (`prompt()` hata diya).
+- **My Voices — cards grid:** naam, language, created date, "Use for clone" (Clone page par le jata hai aur voice select karta hai), Delete. Search filter, empty state + "Clone your first voice" CTA.
+- **Dubbing — professional flow:** drag-drop upload, source-language badge, target language + voice picker, transcript + translation side-by-side panels, dubbed audio player, "20 credits" cost preview. Cross-language 501 par saaf "Translation pack not installed" card (argos-translate + pair chahiye), transcript phir bhi dikhta hai, credits nahi kat te.
+- **Studio:** word/char counter (x/5000, words, cost), chapter jump buttons (player ko chapter start par le jate hain), save-to-history note.
+- **Speech-to-Text:** drag-drop, language badge, Copy + Download .txt, segments clickable rows (segment text copy karte hain, labelled).
+- **History:** filter chips (All / TTS / Clone / Dub / Studio / STT) + search, cards (type badge, voice, credits, date, snippet, Play/Download/Delete), date grouping (Today / date), empty state.
+- **Account:** profile card (username, member since, credits), **change-password** (`POST /api/auth/change-password`, current verify pbkdf2 se, wrong current → 401 generic, new < 6 → 400), Updates card waisa hi, Danger Zone mein logout.
+- **Polish everywhere:** toast notifications (top-right, success/error) har generate/auth/update action par, loading spinners + disabled state har generate button par, har async load par 10 s timeout + error message — koi stuck "Loading voices…" nahi.
+
+### Tested (v0.6.0, this VM — backend + frontend agents, phir parent ne dobara verify kiya)
+- Backend: `/api/health` → 200 v0.6.0, model files present; `/api/models/status` → 200, kokoro 325,532,387 B done + voices 28,214,398 B done, total 353,746,785, complete true; download (already complete) → `started:false`; downloader unit test local http.server 2.5 MB file par pass (fresh, concurrent, resume, unreachable URL → error, good file survives); change-password wrong current → 401, right → 200, new password se login 200, purana 401; 403 TestClient se verify; regression `/api/voices` → 54, `/api/tts` → 200 real WAV 195,628 B.
+- Frontend: landing 200, 9 pages present, console par load par koi JS error nahi; TTS 200 (96 KB, credits 100→99), STT 200, Clone 200 (~25 s, 80 KB), Dub en→en 200 (197 KB), Dub en→es **501** transcript + `credits_charged: 0`, Studio 200 chapters ke sath, change-password throwaway user par pass.
+- Screenshots (Playwright Chromium, 1280×900, `hidden_files/ui-verification-v0.6.0/` — repo mein nahi): Home, TTS (voice grid, Heart highlighted), Clone (wizard + green Ready engine card), Dubbing, Studio, History (cards + Today heading), Account + My Voices logged-in — koi overlap ya toota layout nahi (parent ne TTS aur Clone screenshots khud dobara dekhe).
+
+### Not yet / honest limits
+- Real 338 MB GitHub download is VM par exercise nahi hua (files pehle se complete thi); download logic local 2.5 MB file par prove hui, 206 Range-resume path code-reviewed only — user ke PC par pehli download hi asal test hai.
+- Cloning engine user ke PC par abhi bhi qwentts.cpp build + Qwen GGUFs mangta hai — in-app downloader sirf Kokoro models download karta hai, Qwen nahi. UI `/api/clone/status` jo kehta hai wahi dikhata hai.
+- Cross-language dubbing abhi bhi 501 (argos-translate not installed), Urdu cloning (Fish Speech GPU test — user ka faisla baaki), real payment abhi bhi nahi.
+
 ## [0.5.0] — 2026-11-26
 
 Professional sidebar UI (ElevenLabs-style) + in-app Update button.

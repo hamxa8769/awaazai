@@ -1,17 +1,18 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.5.0 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.6.0 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.5.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> **Honest status v0.6.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
 > voices, CPU par). Voice cloning bhi **chal raha hai** (Qwen3-TTS 0.6B Base
 > via qwentts.cpp, CPU par) — user ki approval ke baad engine build hua aur
 > English clone test pass hua (30 second mein 5.44 s audio, neeche dekhein).
 > **Urdu Qwen mein supported nahi hai** (Phase 0 verdict:
 > FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
+> **Naya v0.6.0: saare sections professionally upgrade + in-app Kokoro model downloader** — TTS voice grid/cards (search, char/cost counter), Clone 4-step wizard + drag-drop + sample reference, My Voices cards, Dubbing side-by-side transcript/translation, Studio chapters with jump, STT transcript download, History filters + date grouping, Account profile + change-password, toasts + spinners, koi stuck "Loading…" nahi. Model missing ho to app ke andar hi "Download Kokoro models (~338 MB)" button se download hota hai (`POST /api/models/download`, sirf 127.0.0.1, progress bar) — manual download ki zaroorat nahi.
 > **Naya v0.5.0: professional sidebar UI + in-app Update button** — ElevenLabs-style sidebar, aik waqt mein aik page (Home, TTS, Cloning, My Voices, Dubbing, Studio, STT, History, Account), dashboard stats + recent generations. Update button sidebar aur Account page mein: `GET /api/update/check` GitHub releases se latest version batata hai, `POST /api/update/apply` (sirf 127.0.0.1) `git pull origin main` chalata hai — `data/` aur `models/` gitignored hain, pull un ko kabhi delete nahi karta. Server khud restart nahi hota: update ke baad Ctrl+C karke `start.bat` dobara chalana parta hai, button yehi imaandari se batata hai.
 > **Naya v0.4.1: start.bat Python detection fix** — `where python` fail hone par bhi `py` launcher aur common install locations se Python dhoondhta hai; `.venv` ho to system Python ki zaroorat hi nahi. Agar phir bhi na mile to diagnostics print karta hai.
 > **Naya v0.4.0: Speech-to-Text (faster-whisper tiny, CPU), Dubbing aur

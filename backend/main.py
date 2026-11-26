@@ -47,13 +47,13 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from backend import accounts, clone_engine, stt_engine, studio, translate, tts_engine
+from backend import accounts, clone_engine, models_downloader, stt_engine, studio, translate, tts_engine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
-app = FastAPI(title="AwaazAI", version="0.5.0")
+app = FastAPI(title="AwaazAI", version=VERSION)
 
 
 def _wav_duration(wav_bytes: bytes) -> float | None:
@@ -95,6 +95,11 @@ class TTSRequest(BaseModel):
 class AuthRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=30)
     password: str = Field(..., min_length=6, max_length=100)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(...)
+    new_password: str = Field(...)
 
 
 class StudioRequest(BaseModel):
@@ -159,6 +164,21 @@ def logout(authorization: str | None = Header(default=None)):
     return {"status": "ok"}
 
 
+@app.post("/api/auth/change-password")
+def change_password(req: ChangePasswordRequest, authorization: str | None = Header(default=None)):
+    """Logged-in password change. Wrong current password -> 401 with the
+    same generic message as login; too-short new password -> 400."""
+    user = _require_user(authorization)
+    try:
+        accounts.change_password(user["id"], req.current_password, req.new_password)
+    except accounts.AuthError as exc:
+        msg = str(exc)
+        if msg == "Username ya password ghalat hai.":
+            raise HTTPException(status_code=401, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "ok"}
+
+
 @app.get("/api/auth/me")
 def me(authorization: str | None = Header(default=None)):
     user = _require_user(authorization)
@@ -210,6 +230,29 @@ def tts(req: TTSRequest, authorization: str | None = Header(default=None)):
 @app.get("/api/clone/status")
 def clone_status():
     return clone_engine.status()
+
+
+# ---- Kokoro model files (v0.6.0) ----
+@app.get("/api/models/status")
+def models_status():
+    """Public: Kokoro model download state + whether the files are present.
+    No auth — the frontend engine pill reads this on load."""
+    return {
+        **models_downloader.status(),
+        "model_files_present": tts_engine.model_files_present(),
+    }
+
+
+@app.post("/api/models/download")
+def models_download(request: Request):
+    """Local-only (127.0.0.1 / ::1, like /api/update/apply): start the
+    background Kokoro model download. Idempotent — already downloading
+    or already complete returns started=False with the current status."""
+    host = request.client.host if request.client else None
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Model download sirf is machine se (127.0.0.1) allowed hai.")
+    started = models_downloader.start_download()
+    return {"started": started, "status": models_downloader.status()}
 
 
 # ---- Clone (login required, 10 credits) ----
