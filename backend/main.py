@@ -29,9 +29,9 @@ from pydantic import BaseModel, Field
 from backend import clone_engine, tts_engine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
-app = FastAPI(title="AwaazAI", version="0.2.1")
+app = FastAPI(title="AwaazAI", version="0.2.2")
 
 
 class TTSRequest(BaseModel):

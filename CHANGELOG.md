@@ -3,6 +3,47 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.2.2] — 2026-11-26
+
+Server start script — server start karke browser mein page khol deta hai.
+
+### Added
+- **`start.py` (cross-platform, main script)** — uvicorn subprocess start
+  kare, `/api/health` poll karke ready hone ka wait kare (max 60 s),
+  phir browser mein `http://127.0.0.1:8000` khole. Console mein saaf
+  message: "AwaazAI chal raha hai: http://127.0.0.1:8000 — band karne ke
+  liye Ctrl+C dabayein". Ctrl+C par server cleanly band hota hai.
+  Headless machine par browser-open fail ho to script fail nahi hoti —
+  URL print karke server chalata rehta hai. Port 8000 busy ho to saaf
+  error + port khaali karne ke steps (crash/traceback nahi). Flags:
+  `--port`, `--host`, `--no-browser`. Sirf Python stdlib, koi dependency nahi.
+- **`start.sh` (Linux/mac)** — pehli dafa `.venv` banaye + requirements
+  install kare, phir `start.py` chalaye. Executable permission set hai.
+- **`start.bat` (Windows)** — double-click se chalaye: python check,
+  `.venv` banaye + install kare (pehli dafa), phir `start.py` chalaye
+  aur browser khole. Is VM par test nahi hua (Linux VM hai) — ye saaf
+  README mein likha hai.
+- **`run.sh`** ab `start.sh` ki taraf point karta hai — purana naam bhi
+  browser kholta hai, dono se ek hi kaam hota hai.
+
+### Changed
+- README: "Kaise chalaye" section — Windows double-click `start.bat`,
+  Linux/mac `./start.sh`, ya `python3 start.py`; pehli dafa model files
+  (Kokoro ~310 MB ONNX + voices, kul ~338 MB) ka note.
+- README ki "still missing" list se cloning-engine wali purani line
+  hatayi — cloning v0.2.1 mein ho gaya tha, wo note ab ghalat tha.
+- Version strings 0.2.2 par: `VERSION`, `backend/main.py`, frontend footer.
+
+### Tested (v0.2.2, this VM — neeche report mein tafseel)
+- `./start.sh` background test: `/api/health` → 200, landing `/` → 200,
+  headless browser-open fail hone par bhi server chalta raha.
+- Windows `start.bat` is VM par test nahi hua — code carefully likha hai,
+  Windows user se confirm karwana baaki hai.
+
+### Not yet
+- Urdu cloning (Fish Speech GPU test, Phase 2 — user ka faisla baaki),
+  login/history, credits, dubbing/Studio.
+
 ## [0.2.1] — 2026-11-26
 
 Voice cloning engine ab asal mein chalta hai (patch — koi API change nahi).

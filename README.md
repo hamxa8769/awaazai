@@ -1,17 +1,19 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.2.1 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.2.2 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.2.1:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> **Honest status v0.2.2:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
 > voices, CPU par). Voice cloning bhi **chal raha hai** (Qwen3-TTS 0.6B Base
 > via qwentts.cpp, CPU par) — user ki approval ke baad engine build hua aur
 > English clone test pass hua (30 second mein 5.44 s audio, neeche dekhein).
 > **Urdu Qwen mein supported nahi hai** (Phase 0 verdict:
 > FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
+> **Naya: server start script** — `start.bat` / `./start.sh` / `python3 start.py`
+> server start karke browser mein page khol deta hai.
 > Dubbing, login, history aur credits abhi nahi bane.
 
 ## Kya ban gaya hai (MVP scaffold)
@@ -26,14 +28,44 @@ CHANGELOG entry — bina tag ke koi release nahi.
 | `POST /api/clone` | ✅ Done — **engine runs, English clone tested** (Qwen3-TTS 0.6B Base, ~30 s per short clone on CPU) |
 | `GET /api/clone/status` | ✅ Done — engine state, languages, Urdu note |
 | Dubbing / Studio | ❌ Coming Soon (Phase 2) |
-| Login / history / credits | ❌ Not in v0.2.1 |
+| Login / history / credits | ❌ Not in v0.2.2 |
+| Server start script (`start.bat` / `./start.sh` / `python3 start.py`) | ✅ Done — server + browser khulta hai |
 
-## Quick start — laptop par (no GPU required)
+## Kaise chalaye — server start karo, browser khud khul jayega
 
 **Minimum:** 8 GB RAM, 10 GB free disk, Python 3.11+ (3.12 par test hua hai).
 GPU zaroori nahi — Kokoro CPU par chalta hai, bas pehli generation mein
 model load hone mein kuch second lagte hain. Comfortable: 16 GB RAM, ya
 cloning ke liye 4–6 GB VRAM wala GPU (baad mein, Qwen3-TTS ke liye).
+
+**Windows — sab se asaan:** `start.bat` par double-click karein.
+Server start hoga, ready hote hi browser mein **http://127.0.0.1:8000**
+khul jayega. Band karne ke liye console mein Ctrl+C dabayein.
+
+**Linux / macOS:**
+```bash
+./start.sh
+```
+
+**Kisi bhi system par (Python se):**
+```bash
+python3 start.py
+```
+
+Ye script server start karta hai, `/api/health` se ready hone ka wait
+karta hai (max 60 second), phir browser kholta hai. Headless machine par
+(headless server, koi browser nahi) browser kholna fail ho to script
+fail nahi hoti — URL print karke server chalata rehta hai.
+
+Pehli dafa `start.sh` / `start.bat` khud `.venv` banata hai aur
+`requirements.txt` install karta hai (sirf pehli dafa). Pehli dafa
+model files bhi chahiye hote hain (Kokoro ONNX ~310 MB + voices file,
+kul ~338 MB) — ye pip mein nahi aate, neeche dekhein.
+
+Doosra port: `./start.sh --port 8001` ya `python3 start.py --port 8001`.
+Sirf server, browser nahi: `python3 start.py --no-browser`.
+
+**Manual tareeqa (agar script na chale):**
 
 ```bash
 cd awaazai
@@ -47,9 +79,9 @@ python3 -m venv .venv
 #    https://github.com/thewh1teagle/kokoro-onnx/releases (model-files-v1.0)
 #    In dono ko models/ folder mein rakhein.
 
-# 3. Server chalao
+# 3. Server chalao (browser khud kholein)
 .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
-#    ya: ./run.sh
+#    ya: ./run.sh   (ye bhi ab start.sh ki taraf point karta hai)
 ```
 
 Phir browser mein kholein: **http://127.0.0.1:8000**
@@ -118,12 +150,16 @@ Rasta B hai (apna platform, tayyar engine).
 awaazai/
 ├── README.md
 ├── requirements.txt
-├── run.sh                  # server start helper
+├── start.py                # cross-platform start: server + browser khole
+├── start.sh                # Linux/mac — .venv + install (pehli dafa) + start.py
+├── start.bat               # Windows — double-click, .venv + install + start.py
+├── run.sh                  # legacy naam, ab start.sh ki taraf point karta hai
 ├── sample.wav              # real TTS sample (af_heart, 4.33 s, 24 kHz)
 ├── assets/logo.png         # AwaazAI logo (original webp files/ mein mehfooz hai)
 ├── backend/
 │   ├── main.py             # FastAPI app + API routes + static serving
-│   └── tts_engine.py       # Kokoro wrapper (lazy load, voices, synthesize)
+│   ├── tts_engine.py       # Kokoro wrapper (lazy load, voices, synthesize)
+│   └── clone_engine.py     # Qwen3-TTS cloning (qwentts.cpp, consent check)
 ├── frontend/
 │   ├── index.html          # landing + TTS demo + Coming Soon sections
 │   ├── styles.css          # dark teal→violet theme (logo se match)
@@ -176,14 +212,14 @@ clone karna block hoga; generated audio par watermark/metadata rahegi.
 
 ## What is still missing for MVP (Phase 1)
 
-1. **Voice cloning engine install** — code + UI + API complete hain,
-   lekin qwentts.cpp build user approval par ruka hai; GPU server par
-   4–6 GB VRAM recommended. Approval ke baad English clone test dobara
-   chalega aur docs update honge.
+1. **Voice cloning engine — DONE in v0.2.1** (pehle yahan "approval par
+   ruka hai" likha tha, wo ab purana hai). qwentts.cpp build ho gaya,
+   English clone test pass hua (30.2 s, `samples/v0.2.0/en-clone.wav`).
+   Baaki: GPU server par tez chalana (CPU par ~30 s per short clone).
 2. **User system** — sign up / login, history, apni cloned voices save karna.
 3. **Credits system** — characters/credits ginna (billing ki bunyaad).
 4. **Urdu cloning** — Qwen mein Urdu nahi hai; Fish Speech S2 GPU test
-   Phase 2 mein (licence dobara check kar ke).
+   Phase 2 mein (licence dobara check kar ke, user ka faisla baaki).
 5. **Dubbing + Studio** — Phase 2 (Whisper + translate + clone; project editor).
 6. **Public launch** — paid plans, API keys, GPU server (Phase 3).
 
