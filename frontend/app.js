@@ -1,10 +1,12 @@
-// AwaazAI frontend — calls the local FastAPI backend. No fake audio: every
-// clip comes from POST /api/tts (Kokoro-82M) or POST /api/clone (Qwen3-TTS).
+// AwaazAI frontend — ElevenLabs-style rebuild (frontend only).
+// Calls the local FastAPI backend. No fake audio: every clip comes from
+// POST /api/tts (Kokoro-82M) or POST /api/clone (Qwen3-TTS).
+// Version comes from GET /api/health at runtime — never hardcoded here.
 const $ = (id) => document.getElementById(id);
 const voiceSel = $("voice"), textEl = $("text"), speedEl = $("speed"),
   speedVal = $("speed-val"), btn = $("generate"), msg = $("msg"),
   player = $("player"), download = $("download"), pill = $("status-pill"),
-  creditsPill = $("credits-pill"), userPill = $("user-pill"),
+  creditsPill = $("credits-pill"),
   logoutBtn = $("logout-btn");
 
 let audioUrl = null;
@@ -13,15 +15,19 @@ let username = localStorage.getItem("awaazai_user") || null;
 const DEMO_LIMIT = 5;
 let demoUsed = Number(localStorage.getItem("awaazai_demo_used") || 0);
 
-// ---- v0.6.0 shared state ----
+// ---- shared state ----
 let allVoices = [];            // /api/voices list (id, name, gender, language_name)
 let historyCache = [];         // /api/history list, newest first
 let savedVoicesCache = [];     // /api/voices/saved list
 let historyFilter = "all";
+let ttsGenderFilter = "all";
+let libraryGenderFilter = "all";
 let modelEndpointAvailable = null; // null = unknown, true/false once probed
 let modelPollTimer = null;
+let modelsComplete = null;     // null = unknown, true/false from /api/models/status
+let appVersion = null;
 
-// ---- v0.6.0: toasts ----
+// ---- toasts ----
 function showToast(message, type) {
   const box = $("toast-container");
   if (!box) return;
@@ -32,7 +38,7 @@ function showToast(message, type) {
   setTimeout(() => { el.remove(); }, 4500);
 }
 
-// ---- v0.6.0: visible busy state (spinner + disabled) on any button ----
+// ---- visible busy state (spinner + disabled) on any button ----
 function setBusy(button, busy, label) {
   if (!button) return;
   if (busy) {
@@ -52,7 +58,7 @@ function setBusy(button, busy, label) {
   }
 }
 
-// ---- v0.6.0: fetch with a timeout so async loads never hang forever ----
+// ---- fetch with a timeout so async loads never hang forever ----
 async function fetchTimeout(url, opts, ms) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms || 10000);
@@ -68,15 +74,26 @@ function authHeaders(extra) {
 }
 
 function setCredits(n) {
-  creditsPill.textContent = (n === null || n === undefined)
-    ? "Credits: — (login karein)"
-    : `Credits: ${n}`;
+  const loggedIn = token !== null && n !== null && n !== undefined;
+  creditsPill.textContent = loggedIn ? `Credits: ${n}` : "Credits: login";
   const side = $("sidebar-credits");
-  if (side) side.textContent = (n === null || n === undefined) ? "Credits: —" : `Credits: ${n}`;
+  if (side) side.textContent = loggedIn ? `Credits: ${n}` : "Credits: login to see";
   const stat = $("stat-credits");
-  if (stat) stat.textContent = (n === null || n === undefined) ? "—" : String(n);
+  if (stat) stat.textContent = loggedIn ? String(n) : "0";
   const prof = $("profile-credits");
-  if (prof && n !== null && n !== undefined) prof.textContent = String(n);
+  if (prof) prof.textContent = loggedIn ? String(n) : "0";
+  const usage = $("usage-credits");
+  if (usage) usage.textContent = loggedIn ? String(n) : "0";
+}
+
+function setAvatar() {
+  const initial = username ? username.charAt(0).toUpperCase() : "?";
+  const fa = $("footer-avatar");
+  if (fa) fa.textContent = initial;
+  const ta = $("top-avatar");
+  if (ta) ta.textContent = initial;
+  const fn = $("footer-name");
+  if (fn) fn.textContent = username || "Guest";
 }
 
 function ttsCostFor(len) {
@@ -85,42 +102,67 @@ function ttsCostFor(len) {
 
 function updateTtsCost() {
   const len = (textEl.value || "").length;
+  const words = (textEl.value || "").trim() ? (textEl.value || "").trim().split(/\s+/).length : 0;
   const count = $("tts-count");
   if (count) count.textContent = `${len}/1000`;
+  const w = $("tts-words");
+  if (w) w.textContent = `${words} words`;
+  const cost = ttsCostFor(len);
   const prev = $("tts-cost-preview");
   if (prev) {
     prev.textContent = token
-      ? `Cost: ${ttsCostFor(len)} credit${ttsCostFor(len) === 1 ? "" : "s"} · Logged in: ${creditsPill.textContent.replace("Credits: ", "")} credits`
-      : `Cost: ${ttsCostFor(len)} credit${ttsCostFor(len) === 1 ? "" : "s"} when logged in · Demo: ${Math.max(0, DEMO_LIMIT - demoUsed)}/${DEMO_LIMIT} left`;
+      ? `Cost: ${cost} credit${cost === 1 ? "" : "s"}`
+      : `Cost: ${cost} credit${cost === 1 ? "" : "s"} when logged in · Demo: ${Math.max(0, DEMO_LIMIT - demoUsed)}/${DEMO_LIMIT} left`;
+  }
+  // Cost on the Generate button itself (label restored by setBusy after runs).
+  if (btn && btn.dataset.origText === undefined) {
+    btn.textContent = token ? `Generate audio · ${cost} credit${cost === 1 ? "" : "s"}` : "Generate audio · demo";
   }
 }
 
 function updateDemoLabel() {
-  $("demo-left").textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
+  const dl = $("demo-left");
+  if (dl) dl.textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
   const acc = $("demo-left-account");
   if (acc) acc.textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
-  $("tts-cost").textContent = token
+  const tc = $("tts-cost");
+  if (tc) tc.textContent = token
     ? "Logged in: 1 credit per 100 characters."
     : `Demo: is session mein ${Math.max(0, DEMO_LIMIT - demoUsed)} / ${DEMO_LIMIT} generations bache hain — login par 100 credits milte hain.`;
   updateTtsCost();
+}
+
+// ---- Home getting-started checklist (REAL completion state) ----
+function updateChecklist() {
+  const set = (id, done) => {
+    const li = $(id);
+    if (!li) return;
+    li.classList.toggle("done", !!done);
+    const st = li.querySelector(".check-state");
+    if (st) st.textContent = done ? "✓" : "○";
+  };
+  set("check-models", modelsComplete === true);
+  set("check-login", !!token);
+  set("check-tts", historyCache.some((h) => h.type === "tts"));
+  set("check-clone", historyCache.some((h) => h.type === "clone"));
 }
 
 function renderAuth() {
   const loggedIn = !!token;
   $("auth-forms").classList.toggle("hidden", loggedIn);
   $("auth-logged").classList.toggle("hidden", !loggedIn);
-  userPill.classList.toggle("hidden", !loggedIn);
   logoutBtn.classList.toggle("hidden", !loggedIn);
   const prof = $("profile-card");
   if (prof) prof.classList.toggle("hidden", !loggedIn);
+  setAvatar();
   if (loggedIn) {
-    userPill.textContent = "👤 " + username;
     $("auth-logged").textContent = `${username} — logged in. History aur saved voices neeche dikhengi.`;
     const pn = $("profile-name");
     if (pn) pn.textContent = username;
     loadProfile();
   }
   updateDemoLabel();
+  updateChecklist();
 }
 
 async function refreshCredits() {
@@ -133,7 +175,7 @@ async function refreshCredits() {
   } catch { /* keep old value */ }
 }
 
-// ---- v0.6.0: profile card from /api/auth/me ----
+// ---- profile card from /api/auth/me ----
 async function loadProfile() {
   if (!token) return;
   try {
@@ -164,6 +206,14 @@ function doLogout(silent) {
   $("saved-voice").innerHTML = '<option value="">— Nayi reference upload karein —</option>';
   const prof = $("profile-card");
   if (prof) prof.classList.add("hidden");
+  const sg = $("stat-generations");
+  if (sg) sg.textContent = "0";
+  const sv = $("stat-voices");
+  if (sv) sv.textContent = "0";
+  const ug = $("usage-generations");
+  if (ug) ug.textContent = "0";
+  const uv = $("usage-voices");
+  if (uv) uv.textContent = "0";
   if (!silent) { $("auth-msg").textContent = "Logged out."; showToast("Logged out.", "success"); }
   renderAuth();
 }
@@ -204,7 +254,7 @@ $("more-credits-btn").addEventListener("click", () => {
   showToast("Credits purchase abhi Coming Soon hai.", "error");
 });
 
-// ---- v0.6.0: change password (honest when the endpoint is absent) ----
+// ---- change password ----
 const pwBtn = $("pw-btn");
 if (pwBtn) pwBtn.addEventListener("click", async () => {
   const cur = $("pw-current").value, nw = $("pw-new").value;
@@ -233,68 +283,136 @@ if (pwBtn) pwBtn.addEventListener("click", async () => {
   } finally { setBusy(pwBtn, false); }
 });
 
+// ---- health: version + engine status come from the API at runtime ----
 async function loadHealth() {
   try {
     const r = await fetchTimeout("/api/health", {}, 10000);
     const d = await r.json();
-    pill.textContent = d.status === "ok"
+    appVersion = d.version || null;
+    const bv = $("brand-version");
+    if (bv) bv.textContent = appVersion ? `v${appVersion} · local` : "local";
+    const av = $("about-version");
+    if (av) av.textContent = appVersion ? `v${appVersion}` : "unknown";
+    const ae = $("about-engines");
+    if (ae) ae.textContent = `Engines: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny — engine status: ${d.engine_loaded ? "Kokoro loaded" : "Kokoro not loaded yet"} · cloning: ${d.cloning || "unknown"} · STT: ${d.stt || "unknown"}`;
+    const ready = d.status === "ok" && d.model_files_present;
+    const pillText = pill.querySelector(".pill-text");
+    if (pillText) pillText.textContent = d.status === "ok"
       ? `Engine: Kokoro-82M ${d.model_files_present ? "ready" : "model missing"}`
       : "Engine: error";
-    pill.classList.toggle("ok", d.status === "ok" && d.model_files_present);
-    pill.classList.toggle("bad", !(d.status === "ok" && d.model_files_present));
+    pill.classList.toggle("ok", ready);
+    pill.classList.toggle("bad", !ready);
     if (d.status === "ok" && !d.model_files_present) showModelCard(true);
   } catch {
-    pill.textContent = "Engine: unreachable";
+    const pillText = pill.querySelector(".pill-text");
+    if (pillText) pillText.textContent = "Engine: unreachable";
     pill.classList.add("bad");
+    const bv = $("brand-version");
+    if (bv) bv.textContent = "local";
   }
 }
 
-// ---- v0.6.0: voice grid (select stays in sync as the fallback) ----
+// ---- voices: shared card renderer (TTS panel list + Library grid) ----
+function voiceCard(v) {
+  const card = document.createElement("div");
+  card.className = "voice-card" + (voiceSel.value === v.id ? " selected" : "");
+  card.setAttribute("role", "option");
+  card.setAttribute("aria-selected", voiceSel.value === v.id ? "true" : "false");
+  card.tabIndex = 0;
+  const name = document.createElement("div");
+  name.className = "voice-name";
+  name.textContent = v.name;
+  const meta = document.createElement("div");
+  meta.className = "voice-meta";
+  meta.textContent = v.language_name || v.language || "";
+  const gender = document.createElement("span");
+  gender.className = "voice-gender";
+  gender.textContent = v.gender === "female" ? "♀ Female" : v.gender === "male" ? "♂ Male" : (v.gender || "");
+  card.append(name, meta, gender);
+  const pick = () => {
+    voiceSel.value = v.id;
+    document.querySelectorAll(".voice-card").forEach((c) => c.classList.remove("selected"));
+    document.querySelectorAll(".voice-card").forEach((c) => c.setAttribute("aria-selected", "false"));
+    card.classList.add("selected");
+    card.setAttribute("aria-selected", "true");
+  };
+  card.addEventListener("click", pick);
+  card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+  return card;
+}
+
+function filterVoices(q, gender) {
+  const query = (q || "").trim().toLowerCase();
+  return allVoices.filter((v) =>
+    (gender === "all" || v.gender === gender) &&
+    (!query || `${v.name} ${v.id} ${v.language_name} ${v.gender}`.toLowerCase().includes(query)));
+}
+
 function renderVoiceGrid() {
   const grid = $("voice-grid");
   if (!grid) return;
-  const q = ($("voice-search").value || "").trim().toLowerCase();
-  const list = allVoices.filter((v) =>
-    !q || `${v.name} ${v.id} ${v.language_name} ${v.gender}`.toLowerCase().includes(q));
   grid.innerHTML = "";
   if (!allVoices.length) {
-    grid.innerHTML = '<p class="muted">Voices load nahi hui — neeche model-downloader card dekhein.</p>';
+    grid.innerHTML = '<p class="muted">No voices loaded yet.</p>';
     return;
   }
+  const list = filterVoices($("voice-search").value, ttsGenderFilter);
   if (!list.length) {
     grid.innerHTML = '<p class="muted">Koi voice is search se match nahi karti.</p>';
     return;
   }
-  for (const v of list) {
-    const card = document.createElement("div");
-    card.className = "voice-card" + (voiceSel.value === v.id ? " selected" : "");
-    card.setAttribute("role", "option");
-    card.setAttribute("aria-selected", voiceSel.value === v.id ? "true" : "false");
-    card.tabIndex = 0;
-    const name = document.createElement("div");
-    name.className = "voice-name";
-    name.textContent = v.name;
-    const meta = document.createElement("div");
-    meta.className = "voice-meta";
-    meta.textContent = v.language_name || v.language || "";
-    const gender = document.createElement("span");
-    gender.className = "voice-gender";
-    gender.textContent = v.gender === "female" ? "♀ Female" : v.gender === "male" ? "♂ Male" : (v.gender || "");
-    card.append(name, meta, gender);
-    const pick = () => {
-      voiceSel.value = v.id;
-      grid.querySelectorAll(".voice-card").forEach((c) => c.classList.remove("selected"));
-      card.classList.add("selected");
-    };
-    card.addEventListener("click", pick);
-    card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
-    grid.appendChild(card);
+  for (const v of list) grid.appendChild(voiceCard(v));
+}
+
+function renderLibraryGrid() {
+  const grid = $("library-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  if (!allVoices.length) {
+    grid.innerHTML = '<p class="muted">No voices loaded yet.</p>';
+    return;
+  }
+  const list = filterVoices($("library-search").value, libraryGenderFilter);
+  if (!list.length) {
+    grid.innerHTML = '<p class="muted">Koi voice is search se match nahi karti.</p>';
+    return;
+  }
+  for (const v of list) grid.appendChild(voiceCard(v));
+}
+
+function showVoicesError(show, message) {
+  for (const [boxId, textId] of [["voices-error", "voices-error-text"], ["library-error", "library-error-text"]]) {
+    const box = $(boxId);
+    if (!box) continue;
+    box.classList.toggle("hidden", !show);
+    if (show && message) {
+      const t = $(textId);
+      if (t) t.textContent = message;
+    }
   }
 }
 
 const voiceSearch = $("voice-search");
 if (voiceSearch) voiceSearch.addEventListener("input", renderVoiceGrid);
-voiceSel.addEventListener("change", renderVoiceGrid);
+const librarySearch = $("library-search");
+if (librarySearch) librarySearch.addEventListener("input", renderLibraryGrid);
+voiceSel.addEventListener("change", () => { renderVoiceGrid(); renderLibraryGrid(); });
+document.querySelectorAll("#tts-gender-filters .chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll("#tts-gender-filters .chip").forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+    ttsGenderFilter = chip.dataset.gender;
+    renderVoiceGrid();
+  });
+});
+document.querySelectorAll("#library-gender-filters .chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll("#library-gender-filters .chip").forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+    libraryGenderFilter = chip.dataset.gender;
+    renderLibraryGrid();
+  });
+});
 
 async function loadVoices() {
   try {
@@ -327,21 +445,29 @@ async function loadVoices() {
       }
       sel.value = "af_heart";
     }
+    showVoicesError(false);
     renderVoiceGrid();
+    renderLibraryGrid();
     if (msg.textContent.startsWith("Voices load nahi hui")) msg.textContent = "";
   } catch (e) {
-    msg.textContent = "Voices load nahi hui: " + e.message + " (10s timeout) — model-downloader card neeche dekhein.";
+    showVoicesError(true, "Voices load nahi hui: " + e.message + " (10s timeout) — dobara try karein, ya model-downloader card dekhein.");
     showToast("Voices load nahi hui: " + e.message, "error");
-    showModelCard(true);
     renderVoiceGrid();
+    renderLibraryGrid();
   }
 }
+const voicesRetry = $("voices-retry");
+if (voicesRetry) voicesRetry.addEventListener("click", () => { showVoicesError(false); loadVoices(); });
+const libraryRetry = $("library-retry");
+if (libraryRetry) libraryRetry.addEventListener("click", () => { showVoicesError(false); loadVoices(); });
 
-// ---- v0.6.0: Kokoro model downloader (defensive — endpoint may not exist yet) ----
+// ---- Kokoro model downloader: missing models REPLACE the voice panel ----
 function showModelCard(show) {
   const card = $("model-card");
-  if (!card) return;
+  const panel = $("voice-panel");
+  if (!card || !panel) return;
   card.classList.toggle("hidden", !show);
+  panel.classList.toggle("hidden", show);
   if (show) {
     const note = $("model-manual-note");
     if (note && modelEndpointAvailable === false) note.classList.remove("hidden");
@@ -358,15 +484,18 @@ async function loadModelStatus() {
       if (note) note.classList.remove("hidden");
       const pt = $("model-progress-text");
       if (pt) pt.textContent = "Model downloader is build mein nahi hai — manual download note dekhein.";
+      const mst = $("models-state-text");
+      if (mst) mst.textContent = "Model downloader is build mein nahi hai — manual download note dekhein (TTS page).";
       return null;
     }
     if (!r.ok) return null;
     modelEndpointAvailable = true;
     const d = await r.json();
+    modelsComplete = !!d.complete;
     updateModelCard(d);
+    updateChecklist();
     return d;
   } catch {
-    // Endpoint absent or server unreachable: manual-download note, no crash.
     modelEndpointAvailable = false;
     const note = $("model-manual-note");
     if (note) note.classList.remove("hidden");
@@ -379,30 +508,42 @@ function updateModelCard(d) {
   if (!card || !d) return;
   const total = d.total_bytes || 0, done = d.downloaded_bytes || 0;
   const wrap = $("model-progress-wrap"), bar = $("model-progress"), pt = $("model-progress-text");
+  const mst = $("models-state-text");
+  const mwrap = $("models-progress-wrap"), mbar = $("models-progress"), mpt = $("models-progress-text");
   if (d.complete) {
     card.classList.add("hidden");
+    const panel = $("voice-panel");
+    if (panel) panel.classList.remove("hidden");
     if (modelPollTimer) { clearTimeout(modelPollTimer); modelPollTimer = null; }
-    showToast("Kokoro models download ho gaye — TTS ready.", "success");
-    loadVoices();
+    if (mst) mst.textContent = "Kokoro models downloaded — TTS ready.";
+    if (mwrap) mwrap.classList.add("hidden");
+    if (mpt) mpt.textContent = "";
+    if (allVoices.length) { renderVoiceGrid(); renderLibraryGrid(); }
+    else loadVoices();
     return;
   }
   card.classList.remove("hidden");
+  const panel = $("voice-panel");
+  if (panel) panel.classList.add("hidden");
+  const pctText = total > 0
+    ? `Downloaded ${(done / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB (${Math.round((done / total) * 100)}%)`
+    : (d.downloading ? "Downloading…" : "Models missing.");
   if (total > 0) {
-    const pct = Math.round((done / total) * 100);
     if (wrap) wrap.classList.remove("hidden");
-    if (bar) bar.style.width = pct + "%";
-    if (pt) pt.textContent = `Downloaded ${(done / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB (${pct}%)`;
-  } else if (pt) {
-    pt.textContent = d.downloading ? "Downloading…" : "Models missing.";
+    if (bar) bar.style.width = Math.round((done / total) * 100) + "%";
+    if (mwrap) mwrap.classList.remove("hidden");
+    if (mbar) mbar.style.width = Math.round((done / total) * 100) + "%";
   }
+  if (pt) pt.textContent = pctText;
+  if (mpt) mpt.textContent = pctText;
+  if (mst) mst.textContent = d.downloading ? "Kokoro models downloading…" : "Kokoro models missing — download karein to TTS chalega.";
   if (d.downloading) {
     modelPollTimer = setTimeout(loadModelStatus, 2000);
   } else if (modelPollTimer) { clearTimeout(modelPollTimer); modelPollTimer = null; }
 }
 
-const modelBtn = $("model-download-btn");
-if (modelBtn) modelBtn.addEventListener("click", async () => {
-  setBusy(modelBtn, true, "Starting download…");
+async function startModelDownload(button) {
+  setBusy(button, true, "Starting download…");
   try {
     const r = await fetchTimeout("/api/models/download", { method: "POST" }, 15000);
     if (r.status === 404) {
@@ -420,12 +561,29 @@ if (modelBtn) modelBtn.addEventListener("click", async () => {
     showToast("Error: " + e.message, "error");
     const note = $("model-manual-note");
     if (note) note.classList.remove("hidden");
-  } finally { setBusy(modelBtn, false); }
-});
+  } finally { setBusy(button, false); }
+}
+const modelBtn = $("model-download-btn");
+if (modelBtn) modelBtn.addEventListener("click", () => startModelDownload(modelBtn));
+const modelsBtn = $("models-download-btn");
+if (modelsBtn) modelsBtn.addEventListener("click", () => startModelDownload(modelsBtn));
 
 speedEl.addEventListener("input", () => { speedVal.textContent = Number(speedEl.value).toFixed(1) + "×"; });
 textEl.addEventListener("input", updateTtsCost);
 updateTtsCost();
+
+function addTtsGenerationCard(text, voiceId, sizeKB) {
+  const list = $("tts-generations");
+  if (!list) return;
+  const empty = list.querySelector("li.muted");
+  if (empty && list.children.length === 1) list.innerHTML = "";
+  const li = document.createElement("li");
+  const when = new Date().toLocaleString();
+  li.innerHTML = `<b>TTS</b> · ${voiceId} · ${when} · ${sizeKB} KB<br><span class="muted"></span>`;
+  li.querySelector(".muted").textContent = (text || "").slice(0, 120);
+  list.prepend(li);
+  while (list.children.length > 5) list.removeChild(list.lastChild);
+}
 
 btn.addEventListener("click", async () => {
   const text = textEl.value.trim();
@@ -457,6 +615,7 @@ btn.addEventListener("click", async () => {
     else { demoUsed += 1; localStorage.setItem("awaazai_demo_used", String(demoUsed)); updateDemoLabel(); }
     msg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, engine Kokoro-82M.`;
     showToast("TTS audio ready.", "success");
+    addTtsGenerationCard(text, voiceSel.value, (blob.size / 1024).toFixed(0));
     player.play().catch(() => {});
     if (token) loadHistory();
   } catch (e) {
@@ -465,7 +624,7 @@ btn.addEventListener("click", async () => {
   } finally { setBusy(btn, false); }
 });
 
-// ---- History (v0.6.0: cards, filter chips, date grouping) ----
+// ---- History (cards, filter chips, date grouping) ----
 function dayLabel(iso) {
   const d = new Date(iso);
   const today = new Date();
@@ -489,7 +648,11 @@ function renderHistory() {
   }
   if (!historyCache.length) {
     list.innerHTML = '<p class="muted">Abhi koi history nahi — pehle TTS ya Clone generate karein.</p>';
-    if (empty) empty.classList.add("hidden");
+    if (empty) {
+      empty.classList.remove("hidden");
+      const p = empty.querySelector("p");
+      if (p) p.textContent = "Start with your first generation.";
+    }
     return;
   }
   if (!filtered.length) {
@@ -547,6 +710,7 @@ function renderHistory() {
       dlBtn.textContent = "Download";
       dlBtn.className = "btn secondary small";
       dlBtn.addEventListener("click", async () => {
+        setBusy(dlBtn, true, "Loading…");
         try {
           const res = await fetch(`/api/history/${h.id}/audio`, { headers: authHeaders() });
           if (!res.ok) throw new Error("Audio load nahi hua");
@@ -556,12 +720,14 @@ function renderHistory() {
           a.href = url; a.download = `awaazai-${h.type}-${h.id}.wav`; a.click();
           setTimeout(() => URL.revokeObjectURL(url), 5000);
         } catch (e) { showToast("Error: " + e.message, "error"); }
+        finally { setBusy(dlBtn, false); }
       });
       actions.append(playBtn, dlBtn);
     }
     const del = document.createElement("button");
     del.textContent = "Delete"; del.className = "btn secondary small";
     del.addEventListener("click", async () => {
+      setBusy(del, true, "Deleting…");
       await fetch(`/api/history/${h.id}`, { method: "DELETE", headers: authHeaders() });
       showToast("History item delete ho gaya.", "success");
       loadHistory();
@@ -577,7 +743,9 @@ function renderTtsRecent() {
   if (!recent) return;
   const ttsItems = historyCache.filter((h) => h.type === "tts").slice(0, 3);
   if (!ttsItems.length) {
-    recent.innerHTML = '<li class="muted">Login karein to recent TTS generations dikhengi.</li>';
+    recent.innerHTML = token
+      ? '<li class="muted">Abhi koi TTS generation nahi — generate karein.</li>'
+      : '<li class="muted">Login karein to recent TTS generations dikhengi.</li>';
     return;
   }
   recent.innerHTML = "";
@@ -600,6 +768,8 @@ async function loadHistory() {
     historyCache = d.history || [];
     const stat = $("stat-generations");
     if (stat) stat.textContent = String(historyCache.length);
+    const ug = $("usage-generations");
+    if (ug) ug.textContent = String(historyCache.length);
     const recent = $("recent-list");
     if (recent) {
       recent.innerHTML = "";
@@ -614,6 +784,7 @@ async function loadHistory() {
     }
     renderHistory();
     renderTtsRecent();
+    updateChecklist();
   } catch (e) {
     historyCache = [];
     if (list) list.innerHTML = '<p class="muted">History load nahi hui (timeout ya server error) — dobara try karein.</p>';
@@ -632,7 +803,24 @@ document.querySelectorAll("#history-filters .chip").forEach((chip) => {
 const historySearch = $("history-search");
 if (historySearch) historySearch.addEventListener("input", renderHistory);
 
-// ---- Saved voices (v0.6.0: cards grid) ----
+// ---- Voices page tabs ----
+document.querySelectorAll("#page-voices .tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("#page-voices .tab").forEach((t) => {
+      t.classList.remove("active");
+      t.setAttribute("aria-selected", "false");
+    });
+    tab.classList.add("active");
+    tab.setAttribute("aria-selected", "true");
+    for (const name of ["library", "mine", "add"]) {
+      const panel = $("voices-panel-" + name);
+      if (panel) panel.classList.toggle("hidden", tab.dataset.tab !== name);
+    }
+    if (tab.dataset.tab === "mine" && token) loadSavedVoices();
+  });
+});
+
+// ---- Saved voices (cards grid) ----
 function renderSavedVoices() {
   const list = $("voices-list");
   const empty = $("voices-empty");
@@ -672,12 +860,14 @@ function renderSavedVoices() {
       showPage("clone");
       const sel = $("saved-voice");
       if (sel) sel.value = String(v.id);
+      updateCloneSteps();
       showToast(`"${v.name}" clone ke liye select ho gayi.`, "success");
     });
     const del = document.createElement("button");
     del.textContent = "Delete";
     del.className = "btn secondary small";
     del.addEventListener("click", async () => {
+      setBusy(del, true, "Deleting…");
       await fetch(`/api/voices/saved/${v.id}`, { method: "DELETE", headers: authHeaders() });
       showToast(`"${v.name}" delete ho gayi.`, "success");
       loadSavedVoices();
@@ -701,6 +891,8 @@ async function loadSavedVoices() {
     sel.innerHTML = '<option value="">— Nayi reference upload karein —</option>';
     const statV = $("stat-voices");
     if (statV) statV.textContent = String(savedVoicesCache.length);
+    const uv = $("usage-voices");
+    if (uv) uv.textContent = String(savedVoicesCache.length);
     for (const v of savedVoicesCache) {
       const o = document.createElement("option");
       o.value = v.id; o.textContent = `${v.name} (${v.language})`;
@@ -719,7 +911,7 @@ async function loadSavedVoices() {
 const voicesSearch = $("voices-search");
 if (voicesSearch) voicesSearch.addEventListener("input", renderSavedVoices);
 
-// ---- v0.6.0: generic drag-and-drop wiring for file inputs ----
+// ---- generic drag-and-drop wiring for file inputs ----
 function wireDropzone(zoneId, inputId, infoId, onFile) {
   const zone = $(zoneId), input = $(inputId);
   if (!zone || !input) return;
@@ -760,6 +952,26 @@ const refEl = $("ref-audio"), cloneTextEl = $("clone-text"), langEl = $("clone-l
 let cloneUrl = null;
 let refPreviewUrl = null;
 
+function updateCloneSteps() {
+  const hasRef = ($("saved-voice").value !== "") || (refEl.files && refEl.files[0]);
+  const hasText = cloneTextEl.value.trim().length > 0;
+  const hasConsent = consentEl.checked;
+  const steps = document.querySelectorAll("#clone-steps li");
+  steps.forEach((li) => {
+    const n = Number(li.dataset.step);
+    let cls = null;
+    if (n === 1) cls = hasRef ? "done" : "active";
+    else if (n === 2) cls = !hasRef ? null : (hasText ? "done" : "active");
+    else if (n === 3) cls = !(hasRef && hasText) ? null : (hasConsent ? "done" : "active");
+    else if (n === 4) cls = (hasRef && hasText && hasConsent) ? "active" : null;
+    li.classList.remove("active", "done");
+    if (cls) li.classList.add(cls);
+  });
+}
+cloneTextEl.addEventListener("input", updateCloneSteps);
+consentEl.addEventListener("change", updateCloneSteps);
+$("saved-voice").addEventListener("change", updateCloneSteps);
+
 async function loadCloneStatus() {
   const card = $("clone-engine-card"), stateEl = $("clone-engine-state"), setupEl = $("clone-engine-setup");
   try {
@@ -791,6 +1003,7 @@ function showRefInfo(file) {
   if (refPreviewUrl) URL.revokeObjectURL(refPreviewUrl);
   refPreviewUrl = URL.createObjectURL(file);
   if (preview) { preview.src = refPreviewUrl; preview.classList.remove("hidden"); }
+  updateCloneSteps();
   const audio = new Audio(refPreviewUrl);
   audio.addEventListener("loadedmetadata", () => {
     const dur = audio.duration;
@@ -875,7 +1088,7 @@ cloneBtn.addEventListener("click", async () => {
   } finally { setBusy(cloneBtn, false); }
 });
 
-// v0.6.0: inline save-voice form replaces prompt().
+// inline save-voice form
 saveVoiceBtn.addEventListener("click", () => {
   const form = $("save-voice-form");
   if (!form) return;
@@ -910,13 +1123,21 @@ if (saveVoiceConfirm) saveVoiceConfirm.addEventListener("click", async () => {
 // ---- Speech-to-Text ----
 const sttBtn = $("stt-btn"), sttMsg = $("stt-msg"), sttCopyBtn = $("stt-copy");
 let lastTranscript = "";
-wireDropzone("stt-drop", "stt-audio", "stt-file-info", null);
+function setSttStep(n) {
+  document.querySelectorAll("#stt-steps li").forEach((li) => {
+    const s = Number(li.dataset.step);
+    li.classList.toggle("active", s === n);
+    li.classList.toggle("done", s < n);
+  });
+}
+wireDropzone("stt-drop", "stt-audio", "stt-file-info", () => setSttStep(2));
 sttBtn.addEventListener("click", async () => {
   const file = $("stt-audio").files[0];
   if (!file) { sttMsg.textContent = "Pehle audio file chunein."; showToast("Pehle audio file chunein.", "error"); return; }
   const form = new FormData();
   form.append("audio", file);
   setBusy(sttBtn, true, "Transcribing…");
+  setSttStep(2);
   sttMsg.textContent = "Transcribing… CPU par pehli dafa model download/load hone mein aik minute lag sakta hai.";
   try {
     const r = await fetch("/api/stt", { method: "POST", headers: authHeaders(), body: form });
@@ -949,6 +1170,7 @@ sttBtn.addEventListener("click", async () => {
     const dlBtn = $("stt-download");
     if (dlBtn) dlBtn.classList.remove("hidden");
     sttMsg.textContent = "Ready.";
+    setSttStep(3);
     showToast("Transcription ready.", "success");
     if (token) loadHistory();
   } catch (e) {
@@ -974,7 +1196,14 @@ if (sttDownloadBtn) sttDownloadBtn.addEventListener("click", () => {
 // ---- Dubbing ----
 const dubBtn = $("dub-btn"), dubMsg = $("dub-msg");
 let dubUrl = null;
-wireDropzone("dub-drop", "dub-audio", "dub-file-info", null);
+function setDubStep(n) {
+  document.querySelectorAll("#dub-steps li").forEach((li) => {
+    const s = Number(li.dataset.step);
+    li.classList.toggle("active", s === n);
+    li.classList.toggle("done", s < n);
+  });
+}
+wireDropzone("dub-drop", "dub-audio", "dub-file-info", () => setDubStep(2));
 dubBtn.addEventListener("click", async () => {
   if (!token) { dubMsg.textContent = "Dubbing ke liye login zaroori hai — pehle login ya signup karein (20 credits per dub)."; showToast("Dubbing ke liye login zaroori hai.", "error"); return; }
   const file = $("dub-audio").files[0];
@@ -988,6 +1217,7 @@ dubBtn.addEventListener("click", async () => {
   if (savedId) form.append("saved_voice_id", savedId);
   form.append("consent", $("dub-consent").checked ? "true" : "false");
   setBusy(dubBtn, true, "Dubbing…");
+  setDubStep(3);
   dubMsg.textContent = "Dubbing… pehle transcribe, phir re-voice — CPU par kuch minute lag sakte hain.";
   $("dub-501-card").classList.add("hidden");
   try {
@@ -1005,6 +1235,7 @@ dubBtn.addEventListener("click", async () => {
       const card501 = $("dub-501-card");
       card501.classList.remove("hidden");
       $("dub-501-detail").textContent = d.detail || "Translation pair installed nahi hai.";
+      setDubStep(4);
       showToast("Translation pack not installed — transcript dikhaya gaya, credits nahi kate.", "error");
       throw new Error(`(501) ${d.detail}`);
     }
@@ -1022,6 +1253,7 @@ dubBtn.addEventListener("click", async () => {
     const remaining = r.headers.get("X-Credits-Remaining");
     if (remaining !== null) setCredits(Number(remaining));
     dubMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB dubbed audio.`;
+    setDubStep(4);
     showToast("Dub ready.", "success");
     player.play().catch(() => {});
     loadHistory();
@@ -1035,6 +1267,13 @@ dubBtn.addEventListener("click", async () => {
 const studioBtn = $("studio-btn"), studioMsg = $("studio-msg"),
   studioSpeedEl = $("studio-speed");
 let studioUrl = null;
+function setStudioStep(n) {
+  document.querySelectorAll("#studio-steps li").forEach((li) => {
+    const s = Number(li.dataset.step);
+    li.classList.toggle("active", s === n);
+    li.classList.toggle("done", s < n);
+  });
+}
 studioSpeedEl.addEventListener("input", () => { $("studio-speed-val").textContent = Number(studioSpeedEl.value).toFixed(1) + "×"; });
 const studioTextEl = $("studio-text");
 function updateStudioCount() {
@@ -1046,6 +1285,7 @@ function updateStudioCount() {
   if (w) w.textContent = `${words} words`;
   const cp = $("studio-cost-preview");
   if (cp) cp.textContent = `Cost: ${ttsCostFor(len)} credit${ttsCostFor(len) === 1 ? "" : "s"}`;
+  if (len > 0) setStudioStep(2);
 }
 studioTextEl.addEventListener("input", updateStudioCount);
 updateStudioCount();
@@ -1054,6 +1294,7 @@ studioBtn.addEventListener("click", async () => {
   const text = studioTextEl.value.trim();
   if (!text) { studioMsg.textContent = "Pehle Studio ke liye text likhein."; showToast("Pehle Studio ke liye text likhein.", "error"); return; }
   setBusy(studioBtn, true, "Generating…");
+  setStudioStep(3);
   studioMsg.textContent = "Generating Studio audio… lamba text chunks mein banta hai, CPU par kuch minute lag sakte hain.";
   try {
     const r = await fetch("/api/studio", {
@@ -1067,8 +1308,14 @@ studioBtn.addEventListener("click", async () => {
     studioUrl = URL.createObjectURL(blob);
     const player = $("studio-player");
     player.src = studioUrl; player.classList.remove("hidden");
-    $("studio-download").href = studioUrl; $("studio-download").classList.remove("hidden");
+    const title = ($("studio-title").value || "").trim() || "My narration project";
+    const dl = $("studio-download");
+    dl.href = studioUrl;
+    dl.download = title.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + ".wav";
+    dl.classList.remove("hidden");
     const chapters = JSON.parse(decodeURIComponent(r.headers.get("X-Chapters") || "[]"));
+    const rt = $("studio-result-title");
+    if (rt) rt.textContent = `Chapters — ${title}`;
     const list = $("studio-chapters");
     list.innerHTML = "";
     for (const c of chapters) {
@@ -1084,9 +1331,11 @@ studioBtn.addEventListener("click", async () => {
       li.appendChild(b);
       list.appendChild(li);
     }
+    $("studio-result").classList.remove("hidden");
     const remaining = r.headers.get("X-Credits-Remaining");
     if (remaining !== null) setCredits(Number(remaining));
     studioMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, ${chapters.length} chapters.`;
+    setStudioStep(4);
     showToast("Studio audio ready.", "success");
     player.play().catch(() => {});
     loadHistory();
@@ -1098,12 +1347,14 @@ studioBtn.addEventListener("click", async () => {
 
 loadHealth();
 loadVoices();
+loadModelStatus();
 loadCloneStatus();
 renderAuth();
+updateCloneSteps();
 if (token) { refreshCredits(); loadHistory(); loadSavedVoices(); }
 
-// ---- v0.5.0: sidebar navigation (one page at a time, hash routing) ----
-const PAGES = ["home", "tts", "clone", "voices", "dub", "studio", "stt", "history", "account"];
+// ---- sidebar navigation (one page at a time, hash routing) ----
+const PAGES = ["home", "tts", "voices", "clone", "dub", "studio", "stt", "history", "account"];
 function showPage(page, pushHash) {
   if (!PAGES.includes(page)) page = "home";
   for (const p of PAGES) {
@@ -1141,16 +1392,16 @@ $("hamburger").addEventListener("click", () => {
   $("sidebar-overlay").classList.toggle("hidden");
 });
 $("sidebar-overlay").addEventListener("click", closeSidebar);
+$("top-avatar").addEventListener("click", () => showPage("account"));
 window.addEventListener("hashchange", () => {
   showPage((location.hash || "#home").slice(1), false);
 });
-// ---- v0.5.0: in-app update (check + pull + prompt restart) ----
+// ---- in-app update (check + pull + prompt restart) ----
 // Honest flow: the running server cannot safely restart itself, so after
 // a successful pull we tell the user to restart (Ctrl+C, phir start.bat).
 let pendingUpdate = null;
 function setUpdateMsg(text) {
-  const a = $("update-msg"), b = $("update-msg-account");
-  if (a) a.textContent = text;
+  const b = $("update-msg-account");
   if (b) b.textContent = text;
 }
 function setApplyVisible(v) {
@@ -1174,7 +1425,7 @@ async function checkUpdate() {
       pendingUpdate = d.latest;
       setUpdateMsg(`Update available: v${d.latest} (current v${d.current})`);
       setApplyVisible(true);
-      showToast(`Update available: v${d.latest}`, "success");
+      showToast(`Update available: v${d.latest} — see Account → Updates.`, "success");
     } else {
       setUpdateMsg(`✓ Up to date — v${d.current}`);
       showToast("Up to date.", "success");

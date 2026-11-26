@@ -3,6 +3,46 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.7.0] — 2026-11-26
+
+ElevenLabs-style frontend rebuild — **frontend ONLY** (`frontend/index.html` + `styles.css` + `app.js`), backend API unchanged (sirf `VERSION` 0.6.0 → 0.7.0). Design + audit: `docs/elevenlabs-ui-research.md` (ElevenLabs sidebar order, per-page workflows, design tokens, bug audit B1–B12 — sab fix hue).
+
+### Fixed (B1–B12, sab)
+- **B1 — Sidebar footer:** ~180 px → 84 px (avatar + naam, credits line, Logout + Check-for-updates chhote buttons). Nav hi aik scrolling region hai (thin scrollbar). 1366×768 par measured: brand 56 px + nav 592 px (scrollHeight 592, last item fully visible) + footer 84 px — koi nav item cut/half-hidden nahi.
+- **B2 — Version:** HTML/CSS/JS mein koi hardcoded version nahi. Version + engine status `GET /api/health` se runtime par aate hain (brand sub `v0.7.0 · local`, Account → About card).
+- **B3 — Content:** max-width 860 → 1120 px, centred, 24 px padding, uniform 16 px gaps, aik card style (radius 14 px, padding 20–24 px), aik H1 per page (topbar title).
+- **B4 — Voice list stuck state:** model missing ho to voice panel ki jagah poora download card aata hai (progress bar + retry) — kabhi stuck "Loading voices…" nahi. Voices load par 10 s timeout + error box + Retry button (TTS panel + Library dono).
+- **B5 — TTS two-column:** editor + output left, voice panel right (search + gender filter + scrollable list), 900 px se neeche aik column. Voice sample-play ka koi endpoint nahi hai — fake play button nahi banaya; cards mein naam + gender + language, note ke saath.
+- **B6 — Step indicators:** Clone wizard ke steps ab real progress dikhate hain (reference → text → consent → generate); Dubbing (Upload → Settings → Generate → Result), Studio (Project → Text & voice → Generate → Listen), STT (Upload → Transcribe → Result) par step header; result panels tab dikhte hain jab result ho.
+- **B7 — Home:** "Honest note" ki wall-of-text hata kar 2-line honest-status card; getting-started checklist REAL state ke saath (models `/api/models/status` se, login `/api/auth/me` se, first TTS / first clone history count se); stats logged-out par 0 + label dikhate hain, kabhi bare "—" nahi.
+- **B8 — Top bar:** breadcrumb/title left, engine pill + credits pill + user avatar (initial letter) right; narrow widths par engine pill sirf coloured dot rehta hai (360 px par verify).
+- **B9 — Mobile:** 480 px + 360 px test — horizontal overflow 0 px; voice grid `minmax(150px, 1fr)`; dropzones ki min-height 120 px; wizard steps full-width rows.
+- **B10 — Labels:** "Urdu + English" badge → "English · 10 languages"; honest Urdu note sirf Clone page par (Qwen Urdu support nahi karta — 422).
+- **B11 — Busy states:** har async button disabled + spinner + double-submit blocked (TTS, Clone, Dub, Studio, STT, auth, password, update, model download, history play/download/delete, saved-voice delete).
+- **B12 — Footer:** engine credits har page se hata kar Account → About card mein (version bhi wahin).
+
+### Added / changed per page
+- **Home:** checklist, stats (0 + label), recent generations, quick actions, 2-line honest status.
+- **Text to Speech:** two-column layout, cost Generate button par (`Generate audio · N credits`), char + word count, in-session Generations list, Recent TTS (logged-in + empty par sahi message).
+- **Voices:** tabs Library (54 Kokoro voices, search + gender filter) / My Voices (saved clones, Use/Delete) / Add Voice (Clone wizard ka link).
+- **Voice Cloning:** wizard step indicator real validation ke saath, engine status card, Urdu note, inline save-voice.
+- **Dubbing:** step header, side-by-side transcript/translation, 501 card (argos not installed, transcript shown, 0 credits charged).
+- **Studio:** project title field (download filename + chapters heading mein), chapters jump buttons, result panel hidden jab tak result na ho.
+- **Speech-to-Text:** step header, auto-detect language note, transcript + copy/download .txt + clickable segments.
+- **History:** filter chips + search + date grouping + play/download/delete per card; empty states mein CTA button.
+- **Account:** profile, Credits & usage card, change password, Updates card (update status ab sirf yahan — sidebar footer se update-msg hata diya), Models card (download status + button), About card (version + engine credits).
+
+### Tested (v0.7.0, this VM)
+- Backend: `/api/health` → 200 v0.7.0, model files present; landing 200, 9 pages present, served HTML mein koi hardcoded version nahi; `/api/voices` → 54/54; `/api/models/status` → complete, 353,746,785 B; `/api/clone/status` → ready; `/api/update/check` → 200 (latest None — GitHub par abhi v0.7.0 release nahi, honest error field).
+- Regression: TTS 200 real WAV 214,060 B (RIFF, credits 100→99); STT 200 (en, transcript sahi, 1 segment); Dub en→en 200 (214,060 B); Dub en→es **501**, `credits_charged: 0`, transcript present; Studio 200 (224,300 B, chapters header ke saath); history 4 items.
+- Screenshots (Playwright Chromium, `hidden_files/ui-verification-v0.7.0/` — repo mein nahi): 9 pages × 1366×768 (logged-in demo) + 1920×1080, 480×800, 360×740 — har page visually inspect ki, koi overlap/cut-off/misalignment nahi; console par koi JS error nahi; horizontal overflow 0 px har viewport par.
+- **Clone generation is VM par FAIL ho raha hai (pre-existing, frontend se unrelated):** `POST /api/clone` → 502, qwentts.cpp binary SIGILL (Illegal instruction, exit 132) deta hai inference shuru hote hi — model load ho jata hai, `[Pipeline] Ready` ke baad crash. Binary 2026-11-17 ka build hai; is VM ka CPU (AMD EPYC 9D64) us ke kisi instruction ko support nahi karta. v0.6.0 mein clone is VM par 200 deta tha — VM/CPU tab se badla lagta hai. `/api/clone/status` phir bhi "ready" kehta hai (sirf binary + models ki presence check karta hai). Backend is release mein change nahi hua (sirf VERSION string), is liye fix is release ka hissa nahi — user ke PC par asal test hoga; wahan binary dobara build karna par sakta hai.
+
+### Not yet / honest limits
+- Cloning engine user ke PC par abhi bhi qwentts.cpp build + Qwen GGUFs mangta hai; is VM par binary SIGILL se crash karta hai (upar dekhein) — clone generation ka VM test is dafa pass nahi hua.
+- Cross-language dubbing abhi bhi 501 (argos-translate not installed), Urdu cloning (Fish Speech) NOT started, real payment NOT added.
+- Windows `.bat`/browser test user ke PC par baaki hai — is release ka asal test wahin hoga.
+
 ## [0.6.0] — 2026-11-26
 
 Baqi saare sections professionally upgrade, ElevenLabs jaisi fully developed + working (user ne v0.5.0 apne PC par dekh kar kaha tha: sidebar to aa gaya, baqi sections bhi professionally upgrade karo).
