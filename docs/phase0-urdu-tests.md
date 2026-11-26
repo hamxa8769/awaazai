@@ -1,16 +1,16 @@
-# Phase 0 — Urdu tests (AwaazAI v0.2.0)
+# Phase 0 — Urdu tests (AwaazAI v0.2.0 → v0.2.1)
 
 Date: 2026-11-26. VM: no NVIDIA GPU (`nvidia-smi` not found), 4 CPUs,
 7.7 GB RAM (~0.8–1.0 GB free at test time), 121 GB disk free.
-Status: **recorded honestly — Qwen Urdu FAILs by design, English clone
-NOT RUN on this VM, Fish Speech NOT RUN locally.** No audio was faked.
+Status: **updated for v0.2.1 — English clone PASS (real audio), Qwen Urdu
+still FAILs by design, Fish Speech NOT RUN locally.** No audio was faked.
 
 ## Verdict up front
 
 | Test | Result | Evidence |
 |---|---|---|
 | (a) Qwen3-TTS Urdu check | **FAIL — by design** | Qwen's model card lists 10 languages: Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian. **Urdu is not in the list.** A request for `ur` on `/api/clone` is therefore rejected with 422 (tested below). Urdu text fed to Qwen would not be Urdu speech. |
-| (b) English clone test | **NOT RUN on this VM** | Clone code + UI + API are complete and tested for validation. The engine binary (qwentts.cpp) was cloned but **not built or run** — the build step failed an execution-risk check and needs explicit user approval before it is processed (see "Blocker" below). No cloned wav exists; none was faked. |
+| (b) English clone test | **PASS (v0.2.1)** | Real clone via `/api/clone`: HTTP 200, 30.2 s on CPU, output `samples/v0.2.0/en-clone.wav` — 5.44 s, 24 kHz, RMS 0.073, distinct SHA-256 from reference and from Kokoro sample. First attempt failed honestly (see below) and was fixed by switching talker. |
 | (c) Fish Speech as Urdu backup | **NOT RUN locally — docs check only** | Fish Speech S2 lists Urdu (`ur`) in its 80+ language coverage (Tier 3, quality varies by language). It is the correct Urdu candidate, but it is a ~4B-parameter model needing a GPU, and its licence is research / non-commercial — it is **not** in the product. Running it on this 7.7 GB, no-GPU VM was not attempted. |
 
 ## (a) Qwen3-TTS Urdu — FAIL by design
@@ -41,50 +41,73 @@ correct, honest behaviour — not a bug.
 different engine (Fish Speech S2, see (c)) or an Urdu fine-tune in
 Phase 2. The platform does not promise Urdu cloning in v0.2.0.
 
-## (b) English clone test — NOT RUN on this VM
+## (b) English clone test — PASS (v0.2.1, after one honest failure)
 
-What is done:
-- `backend/clone_engine.py` — full Qwen3-TTS 0.6B CustomVoice wiring
-  via qwentts.cpp (GGUF Q8_0, CPU backend), with validation
-  (3–30 s reference, max 500 chars, consent mandatory), 503 when the
-  engine is not installed, 422 for unsupported language.
-- `POST /api/clone` (multipart) + `GET /api/clone/status` — tested
-  for validation errors (see "API test results" below).
-- Frontend Clone section — upload, text, language picker, consent
-  checkbox, Generate, play/download.
+**Approval:** the user approved building/running qwentts.cpp in plain
+words on 2026-11-26 ~16:37 PKT ("Han, qwentts.cpp build karke English
+clone test chalao"). That approval covered the build/run of qwentts.cpp
+**only for this English clone test** — not Urdu cloning, not Fish Speech.
 
-What is NOT done:
-- The qwentts.cpp binary was **not built and not run** on this VM.
+**Build (v0.2.1):**
+- `cmake` configure with `-DGGML_BLAS=ON` (as in `buildcpu.sh`) failed:
+  BLAS dev files are not installed on this VM (only the runtime
+  `libblas.so.3`, no headers). Re-configured **without BLAS** — configure
+  passed, build with `-j2` (memory safety on 7.7 GB RAM) finished clean,
+  exit 0: `build/qwen-tts`, `build/qwen-codec`, `build/tts-server`.
+- Weights downloaded from Hugging Face `Serveurperso/Qwen3-TTS-GGUF`
+  into `models/qwen/` (gitignored, not committed):
+  `qwen-talker-0.6b-customvoice-Q8_0.gguf` (968,588,544 bytes,
+  sha256 `4eb38675…8519`) and `qwen-tokenizer-12hz-Q8_0.gguf`
+  (291,150,624 bytes, sha256 `1883beee…fd94`).
 
-Blocker (exact): while fetching the qwentts.cpp source, the execution
-returned a security notice that the delivered content failed an
-execution-risk check — its build scripts / hooks can run code during
-ordinary processing. Per that notice, I did **not** run, build, test,
-import, load or source that content, and did not run git/package
-commands inside it. The cloned source sits unbuilt at
-`tools/qwentts.cpp/` (gitignored, not committed) and must not be built
-until the user explicitly approves going ahead in plain words.
+**First attempt — FAILED honestly (v0.2.0 code):** `POST /api/clone`
+returned **502 after 14.5 s**. Exact engine error:
+`[CLI] ERROR: custom_voice models require --speaker`.
+Root cause: qwentts.cpp's `--ref-wav` is **Base only** (`--help` says so);
+CustomVoice models are 9 named speakers only (`--speaker`) and cannot
+clone from a reference clip. v0.2.0 had wired the CustomVoice talker —
+wrong model for cloning. No audio was produced; the 560-byte response
+was the error JSON, not a wav, and was deleted (not kept as a sample).
 
-Reference audio prepared for the future run (real Kokoro audio, NOT a
-clone): `samples/v0.2.0/ref-en-af_heart.wav` — generated with the
-v0.1.0 Kokoro engine, voice af_heart, text "Hello, this is AwaazAI.
-This is a clean reference voice for cloning tests." When the engine
-is approved and built, the clone test is: feed this file as reference,
-generate "Hello, this is my cloned voice, speaking with AwaazAI.",
-and compare by listening + duration/sample-rate + a basic spectral
-similarity check. Until then, `samples/v0.2.0/` contains only the
-reference — **no `en-clone.wav` exists, and none was created.**
+**Fix (v0.2.1):** downloaded the **Base** 0.6B talker
+`qwen-talker-0.6b-base-Q8_0.gguf` (sha256
+`d54dbaf1…426`, gitignored) and switched `backend/clone_engine.py` to it
+(same `--ref-wav` command, no `--speaker`). All "CustomVoice" labels in
+code, API header, frontend and README were corrected to "Base".
 
-What the clone run needs (for the GPU-server / approved-build run):
-- qwentts.cpp CPU build (`./buildcpu.sh`, needs cmake + g++ — both
-  present on this VM) and GGUF weights
-  `qwen-talker-0.6b-customvoice-Q8_0.gguf` + `qwen-tokenizer-12hz-Q8_0.gguf`
-  in `models/qwen/` (gitignored, ~1–2 GB download).
-- Expected CPU speed: roughly a quarter of GPU speed; a short clone
-  may take minutes on 4 CPUs. On a GPU server (4–6 GB VRAM) it is
-  seconds.
-- After approval, re-run this test and update this document with the
-  real result — do not ship cloning as "working" before that run.
+**Second attempt — PASS:** direct CLI test first, then the real API:
+- CLI: `qwen-tts --model <base> --codec <tokenizer> --ref-wav
+  ref-en-af_heart.wav --lang English -o cli-clone-test.wav` → exit 0,
+  28 s wall, 5.36 s audio, RTF 4.256 on CPU.
+- API: `POST /api/clone` (reference `ref-en-af_heart.wav`, text "Hello,
+  this is AwaazAI. A natural voice, made on your own laptop.",
+  language=en, consent=true) → **HTTP 200 in 30.2 s, 261,164 bytes**,
+  saved as `samples/v0.2.0/en-clone.wav` — **5.44 s, 24 kHz mono,
+  RMS 0.0734, peak 0.422, 67.9% non-silent** (reference: RMS 0.0753,
+  83.3% non-silent — same loudness ballpark, speech-like energy with
+  pauses). SHA-256 `8853aba6…e285` — distinct from the reference
+  (`3861da5f…`) and from the Kokoro `sample.wav` (`18850c60…`), and
+  distinct from the CLI run (`8db3fdcf…`, different random seed), so it
+  is a genuine new generation, not a copy of any input.
+- `GET /api/clone/status` → `state: "ready"`, engine
+  `qwen3-tts-0.6b-base (via qwentts.cpp, GGUF Q8_0)`.
+
+**Honest limit:** I cannot listen to audio, so "sounds like the
+reference" is verified only by objective checks (real synthesis, correct
+duration for the sentence, speech-like loudness/pauses, distinct hash,
+same 24 kHz pipeline). The user should listen to `en-clone.wav` and
+judge the voice match by ear — that is the real similarity test.
+CPU speed on this VM is ~4.3× slower than real time (28–30 s for ~5.4 s
+of audio); on a GPU server it would be seconds. The CustomVoice
+weights stay on disk unused (gitignored) — they are not needed for
+cloning and are not shipped.
+
+What the clone run needed (now done):
+- qwentts.cpp CPU build (cmake + g++ — both present on this VM) and
+  GGUF weights `qwen-talker-0.6b-base-Q8_0.gguf` +
+  `qwen-tokenizer-12hz-Q8_0.gguf` in `models/qwen/` (gitignored).
+- The CustomVoice talker downloaded in the first attempt is **not**
+  used for cloning and is not required for a fresh install.
 
 ## (c) Fish Speech as Urdu backup — docs check only
 
@@ -114,39 +137,39 @@ for Phase 2, to be tested on a GPU machine (or via a short paid API
 evaluation, if the user approves that spend) before any Urdu-cloning
 promise is made.
 
-## API test results (v0.2.0 server, this VM)
+## API test results (v0.2.1 server, this VM)
 
-Server: `uvicorn backend.main:app`, Kokoro models present.
-- `GET /api/health` → 200, `cloning: "not-installed"`,
-  `cloning_engine: "qwen3-tts-0.6b-customvoice (via qwentts.cpp, GGUF Q8_0)"`
+Server: `uvicorn backend.main:app`, Kokoro models + Qwen engine present.
+- `GET /api/health` → 200, `cloning: "ready"`,
+  `cloning_engine: "qwen3-tts-0.6b-base (via qwentts.cpp, GGUF Q8_0)"`
 - `GET /api/voices` → 200, 54 voices
 - `POST /api/tts` → 200, real Kokoro WAV (regression: TTS still works)
-- `GET /api/clone/status` → 200, `state: "not-installed"`,
+- `GET /api/clone/status` → 200, `state: "ready"`,
   `urdu_supported: false`, supported languages listed
 - `POST /api/clone` with no consent → 400 (consent required)
 - `POST /api/clone` with consent + `language=ur` → 422 (Urdu not supported)
-- `POST /api/clone` with consent + `language=en` + valid reference,
-  engine not installed → 503 (engine not installed, with setup steps)
+- `POST /api/clone` with consent + `language=en` + valid reference →
+  **200, 261,164 bytes in 30.2 s** (see (b) above)
 - `POST /api/clone` with no file field at all → 422 (FastAPI field
   validation, "Field required" — the multipart `reference` field itself
   is missing); with a `.txt` file → 400 (unsupported format)
 - Landing `/` → 200, Clone section present
 
-Full curl transcript: see the v0.2.0 release report (parent agent).
+(Previous v0.2.0 results — cloning "not-installed", engine 503 — are
+superseded by the v0.2.1 run above.)
 
 ## Samples in samples/v0.2.0/
 
 | File | What it is | Real? |
 |---|---|---|
-| `ref-en-af_heart.wav` | Kokoro reference for future clone test | Yes — real Kokoro audio |
-| `en-clone.wav` | English clone output | **Missing — not generated (engine not run)** |
+| `ref-en-af_heart.wav` | Kokoro reference for the clone test | Yes — real Kokoro audio |
+| `en-clone.wav` | English clone output (API, v0.2.1) | **Yes — real Qwen3-TTS Base clone, 5.44 s, sha256 `8853aba6…e285`** |
 | `ur-test.wav` | Urdu Qwen test output | **Missing — Qwen does not support Urdu** |
 
 ## Decision needed from the user
 
-1. **Approve building/running qwentts.cpp** (the cloned C++ source)
-   so the English clone test can actually run on this VM (CPU, slow)
-   or on a GPU server? Until approval, cloning stays "code ready,
-   needs engine".
-2. **Urdu direction:** Fish Speech S2 GPU test in Phase 2, or accept
-   English-only cloning in v0.2.0 and revisit Urdu later?
+1. ~~**Approve building/running qwentts.cpp**~~ — **DONE 2026-11-26
+   ~16:37 PKT** ("Han, qwentts.cpp build karke English clone test
+   chalao"). Engine built, English clone test passed in v0.2.1.
+2. **Urdu direction (still open):** Fish Speech S2 GPU test in Phase 2,
+   or accept English-only cloning and revisit Urdu later?

@@ -51,7 +51,7 @@
 
   <section class="demo card" id="clone">
     <h2>Voice Cloning — apni awaz ki copy</h2>
-    <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B CustomVoice. <span id="clone-status" class="muted">Checking cloning engine…</span></p>
+    <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B Base. <span id="clone-status" class="muted">Checking cloning engine…</span></p>
     <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
     <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
     <label for="clone-text">Text <span class="muted">(max 500 characters)</span></label>
@@ -99,12 +99,12 @@
 
   <section class="card note">
     <h3>Honest note</h3>
-    <p>Ye v0.2.0 hai: Text-to-Speech kaam karta hai (54 fixed Kokoro voices) aur Voice Cloning ka code + UI poora bana hai (Qwen3-TTS 0.6B). Cloning tabhi chalega jab Qwen engine is server par installed ho — warna saaf 503 error milega. Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai. Dubbing, login, history aur credits abhi nahi bane — wo Phase 1 / Phase 2 mein aayenge.</p>
+    <p>Ye v0.2.1 hai: Text-to-Speech kaam karta hai (54 fixed Kokoro voices) aur Voice Cloning bhi chal raha hai (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone). Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai. Dubbing, login, history aur credits abhi nahi bane — wo Phase 1 / Phase 2 mein aayenge.</p>
   </section>
 </main>
 
 <footer>
-  <p>AwaazAI v0.2.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B CustomVoice (Apache 2.0)</p>
+  <p>AwaazAI v0.2.1 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0)</p>
 </footer>
 <script src="app.js"></script>
 </body>

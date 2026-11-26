@@ -11,7 +11,7 @@ Endpoints:
     GET  /api/clone/status   — cloning engine state (binary/weights/languages)
     POST /api/clone          — multipart: reference audio + text + language
                                + consent -> WAV in the cloned voice
-                               (Qwen3-TTS 0.6B CustomVoice via qwentts.cpp;
+                               (Qwen3-TTS 0.6B Base via qwentts.cpp;
                                503 when the engine is not installed on this
                                server, 422 for Urdu / unsupported language,
                                400 for missing audio/text/consent)
@@ -29,9 +29,9 @@ from pydantic import BaseModel, Field
 from backend import clone_engine, tts_engine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
-app = FastAPI(title="AwaazAI", version="0.2.0")
+app = FastAPI(title="AwaazAI", version="0.2.1")
 
 
 class TTSRequest(BaseModel):
@@ -131,7 +131,7 @@ async def clone(
         headers={
             "Content-Disposition": 'attachment; filename="awaazai-clone.wav"',
             "X-Sample-Rate": str(sample_rate),
-            "X-Engine": "qwen3-tts-0.6b-customvoice",
+            "X-Engine": "qwen3-tts-0.6b-base",
             "X-Cloned-Voice": "reference-audio",
         },
     )
