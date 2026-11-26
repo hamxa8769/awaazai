@@ -49,12 +49,42 @@
     <p class="muted small">Sample: <a href="/sample.wav" download>sample.wav</a> (generated with this same engine, voice af_heart).</p>
   </section>
 
-  <section class="features">
-    <div class="card coming">
-      <h3>Voice Cloning</h3>
-      <p>3–10 second ki recording se apni awaz ki copy. Apni awaz save karo, bar bar use karo.</p>
-      <span class="soon">Coming soon — Qwen3-TTS 0.6B</span>
+  <section class="demo card" id="clone">
+    <h2>Voice Cloning — apni awaz ki copy</h2>
+    <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B CustomVoice. <span id="clone-status" class="muted">Checking cloning engine…</span></p>
+    <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
+    <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+    <label for="clone-text">Text <span class="muted">(max 500 characters)</span></label>
+    <textarea id="clone-text" rows="3" maxlength="500">Hello, this is my cloned voice, speaking with AwaazAI.</textarea>
+    <div class="row">
+      <div class="field">
+        <label for="clone-lang">Language</label>
+        <select id="clone-lang">
+          <option value="en">English</option>
+          <option value="zh">Chinese</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="de">German</option>
+          <option value="fr">French</option>
+          <option value="ru">Russian</option>
+          <option value="pt">Portuguese</option>
+          <option value="es">Spanish</option>
+          <option value="it">Italian</option>
+          <option value="ur">Urdu — not supported by Qwen (see Phase 0 test)</option>
+        </select>
+      </div>
     </div>
+    <label class="consent"><input type="checkbox" id="consent"> Ye meri apni awaz hai, ya is awaz ko clone karne ki mujhe explicit permission hai. Bina ijazat kisi aur ki awaz clone karna mana hai.</label>
+    <div class="row actions">
+      <button id="clone-btn">Clone voice &amp; generate</button>
+      <a id="clone-download" class="btn hidden" href="#" download="awaazai-clone.wav">Download clone WAV</a>
+    </div>
+    <p id="clone-msg" class="muted" role="status"></p>
+    <audio id="clone-player" controls class="hidden"></audio>
+    <p class="muted small">Cloning CPU par slow ho sakta hai — aik chhoti audio mein kuch minute lag sakte hain. Agar engine is server par installed nahi hai to saaf error milega, fake audio nahi.</p>
+  </section>
+
+  <section class="features">
     <div class="card coming">
       <h3>Dubbing</h3>
       <p>Video upload karo — Whisper transcribe, translate, phir wohi awaz doosri zuban mein.</p>
@@ -69,12 +99,12 @@
 
   <section class="card note">
     <h3>Honest note</h3>
-    <p>Ye MVP scaffold hai, poora platform nahi. Abhi sirf Text-to-Speech kaam karta hai (54 fixed Kokoro voices). Voice cloning, dubbing, login, history aur credits abhi nahi bane — wo Phase 1 / Phase 2 mein aayenge. Urdu cloning English jitni perfect nahi hai; pehle Phase 0 test hoga, phir wada.</p>
+    <p>Ye v0.2.0 hai: Text-to-Speech kaam karta hai (54 fixed Kokoro voices) aur Voice Cloning ka code + UI poora bana hai (Qwen3-TTS 0.6B). Cloning tabhi chalega jab Qwen engine is server par installed ho — warna saaf 503 error milega. Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai. Dubbing, login, history aur credits abhi nahi bane — wo Phase 1 / Phase 2 mein aayenge.</p>
   </section>
 </main>
 
 <footer>
-  <p>AwaazAI v0.1.0-mvp — Engine: Kokoro-82M (Apache 2.0) · Cloning planned: Qwen3-TTS 0.6B (Apache 2.0)</p>
+  <p>AwaazAI v0.2.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B CustomVoice (Apache 2.0)</p>
 </footer>
 <script src="app.js"></script>
 </body>

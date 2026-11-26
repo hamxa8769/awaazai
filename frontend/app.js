@@ -66,3 +66,55 @@ btn.addEventListener("click", async () => {
 
 loadHealth();
 loadVoices();
+
+// ---- Voice cloning (POST /api/clone, multipart) ----
+const refEl = $("ref-audio"), cloneTextEl = $("clone-text"), langEl = $("clone-lang"),
+  consentEl = $("consent"), cloneBtn = $("clone-btn"), cloneMsg = $("clone-msg"),
+  clonePlayer = $("clone-player"), cloneDownload = $("clone-download"),
+  cloneStatus = $("clone-status");
+let cloneUrl = null;
+
+async function loadCloneStatus() {
+  try {
+    const r = await fetch("/api/clone/status");
+    const d = await r.json();
+    cloneStatus.textContent = d.state === "ready"
+      ? "Engine ready — Qwen3-TTS 0.6B CustomVoice."
+      : `Engine: ${d.state} — cloning is code-ready but the engine is not installed on this server yet (${d.setup || ""})`;
+  } catch {
+    cloneStatus.textContent = "Cloning engine status: unreachable.";
+  }
+}
+
+cloneBtn.addEventListener("click", async () => {
+  if (!refEl.files || !refEl.files[0]) { cloneMsg.textContent = "Pehle reference audio upload karein (3–30 second)."; return; }
+  const text = cloneTextEl.value.trim();
+  if (!text) { cloneMsg.textContent = "Pehle clone ke liye text likhein."; return; }
+  if (!consentEl.checked) { cloneMsg.textContent = "Consent zaroori hai — checkbox tick karein ke ye aap ki apni awaz hai ya permission hai."; return; }
+  const form = new FormData();
+  form.append("reference", refEl.files[0]);
+  form.append("text", text);
+  form.append("language", langEl.value);
+  form.append("consent", consentEl.checked ? "true" : "false");
+  cloneBtn.disabled = true;
+  cloneMsg.textContent = "Cloning… CPU par is mein kuch minute lag sakte hain, page band na karein.";
+  try {
+    const r = await fetch("/api/clone", { method: "POST", body: form });
+    if (!r.ok) {
+      let detail = "Clone failed";
+      try { detail = (await r.json()).detail || detail; } catch { /* keep default */ }
+      throw new Error(`(${r.status}) ${detail}`);
+    }
+    const blob = await r.blob();
+    if (cloneUrl) URL.revokeObjectURL(cloneUrl);
+    cloneUrl = URL.createObjectURL(blob);
+    clonePlayer.src = cloneUrl; clonePlayer.classList.remove("hidden");
+    cloneDownload.href = cloneUrl; cloneDownload.classList.remove("hidden");
+    cloneMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, cloned voice (Qwen3-TTS 0.6B).`;
+    clonePlayer.play().catch(() => {});
+  } catch (e) {
+    cloneMsg.textContent = "Error: " + e.message;
+  } finally { cloneBtn.disabled = false; }
+});
+
+loadCloneStatus();
