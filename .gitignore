@@ -2,7 +2,10 @@
 __pycache__/
 *.pyc
 models/
+tools/
 *.wav
 !sample.wav
+!samples/**/*.wav
 *.mp3
+!samples/**/*.mp3
 .DS_Store

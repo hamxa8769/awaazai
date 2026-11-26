@@ -1,14 +1,19 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**MVP scaffold v0.1.0 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.2.0 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status:** Abhi sirf **Text-to-Speech** kaam karta hai (Kokoro-82M, 54 fixed
-> voices, CPU par). Voice cloning, dubbing, login, history aur credits **abhi
-> nahi bane**. Ye scaffold hai, poora platform nahi.
+> **Honest status v0.2.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> voices, CPU par). Voice cloning ka **code + UI + API poora bana hai**
+> (Qwen3-TTS 0.6B CustomVoice), lekin engine is server par **installed nahi**
+> hai — qwentts.cpp ka build ek security check par ruka hai, user ki
+> explicit approval chahiye. Tab tak `/api/clone` saaf 503 deta hai, fake
+> audio nahi. **Urdu Qwen mein supported nahi hai** (Phase 0 verdict:
+> FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
+> Dubbing, login, history aur credits abhi nahi bane.
 
 ## Kya ban gaya hai (MVP scaffold)
 
@@ -19,9 +24,10 @@ CHANGELOG entry — bina tag ke koi release nahi.
 | `GET /api/health` | ✅ Done |
 | `GET /api/voices` (54 Kokoro voices) | ✅ Done |
 | `POST /api/tts` (text → WAV) | ✅ Done, verified with real sample |
-| `POST /api/clone` | ❌ 501 — honestly not implemented (Qwen3-TTS 0.6B planned) |
+| `POST /api/clone` | ✅ Code + UI + API done — **engine not installed on this server (503)**, approval needed to build qwentts.cpp |
+| `GET /api/clone/status` | ✅ Done — engine state, languages, Urdu note |
 | Dubbing / Studio | ❌ Coming Soon (Phase 2) |
-| Login / history / credits | ❌ Not in MVP scaffold |
+| Login / history / credits | ❌ Not in v0.2.0 |
 
 ## Quick start — laptop par (no GPU required)
 
@@ -62,12 +68,21 @@ curl -X POST http://127.0.0.1:8000/api/tts \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello, this is AwaazAI.","voice":"af_heart","speed":1.0}' \
   --output out.wav
+curl http://127.0.0.1:8000/api/clone/status
+# Cloning (multipart): reference audio + text + language + consent=true
 curl -X POST http://127.0.0.1:8000/api/clone \
-  -H 'Content-Type: application/json' -d '{}'   # -> 501, not implemented
+  -F "reference=@ref.wav" -F "text=Hello, this is my cloned voice." \
+  -F "language=en" -F "consent=true" --output clone.wav
+# -> 503 if the Qwen engine is not installed on this server (honest);
+# -> 422 for language=ur (Qwen does not support Urdu);
+# -> 400 if consent is missing/false, audio/text is missing, or the
+#    reference is shorter than 3 s / longer than 30 s.
 ```
 
 `POST /api/tts` limits (MVP safety): text max 1000 characters, speed 0.5–2.0,
-voice sirf 54 Kokoro voices mein se.
+voice sirf 54 Kokoro voices mein se. `POST /api/clone` limits: text max
+500 characters, reference 3–30 s, max 20 MB, consent mandatory — bina
+ijazat kisi aur ki awaz clone karna block hai.
 
 ## Architecture
 
@@ -118,7 +133,21 @@ awaazai/
 └── .venv/                  # gitignored, local Python env
 ```
 
-## Phase 0 — Urdu test plan (plan PDF, Section 7 se)
+## Phase 0 — Urdu test verdict (v0.2.0, full report: docs/phase0-urdu-tests.md)
+
+- **Qwen3-TTS Urdu: FAIL by design.** Qwen ki 10 languages mein Urdu
+  nahi hai (Chinese, English, Japanese, Korean, German, French, Russian,
+  Portuguese, Spanish, Italian). `/api/clone` par `language=ur` 422 deta hai.
+- **English clone: NOT RUN on this VM.** Code + UI + API complete aur
+  validation-tested hain, lekin qwentts.cpp ka build ek execution-risk
+  check par ruka hai — user ki explicit approval chahiye. Koi cloned wav
+  nahi banaya gaya, koi fake audio nahi.
+- **Fish Speech S2: Urdu candidate (docs check).** 80+ languages, Urdu
+  (`ur`) listed hai, Tier 3 (quality varies). ~4B parameters, GPU
+  chahiye, licence research / non-commercial — product mein nahi hai,
+  Phase 2 mein GPU par test hoga.
+- Reference audio tayyar hai: `samples/v0.2.0/ref-en-af_heart.wav`
+  (real Kokoro, 4.78 s) — future clone test ke liye.
 
 Urdu mein open-source voice cloning abhi English jitni perfect nahi hai.
 Is liye Urdu ko wada kar ke nahi, **test kar ke** shamil kiya jayega.
@@ -148,11 +177,14 @@ clone karna block hoga; generated audio par watermark/metadata rahegi.
 
 ## What is still missing for MVP (Phase 1)
 
-1. **Voice cloning** — Qwen3-TTS 0.6B wiring (`/api/clone` abhi 501 hai),
-   4–6 GB VRAM recommended, reference-audio upload + consent check.
+1. **Voice cloning engine install** — code + UI + API complete hain,
+   lekin qwentts.cpp build user approval par ruka hai; GPU server par
+   4–6 GB VRAM recommended. Approval ke baad English clone test dobara
+   chalega aur docs update honge.
 2. **User system** — sign up / login, history, apni cloned voices save karna.
 3. **Credits system** — characters/credits ginna (billing ki bunyaad).
-4. **Phase 0 Urdu tests** — upar wala test plan, teeno tests, sun kar faisla.
+4. **Urdu cloning** — Qwen mein Urdu nahi hai; Fish Speech S2 GPU test
+   Phase 2 mein (licence dobara check kar ke).
 5. **Dubbing + Studio** — Phase 2 (Whisper + translate + clone; project editor).
 6. **Public launch** — paid plans, API keys, GPU server (Phase 3).
 
