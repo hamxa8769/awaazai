@@ -3,6 +3,56 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.4.1] — 2026-11-26
+
+Windows start.bat Python detection fix — user ke PC par real bug.
+
+### Fixed
+- **`start.bat` kehta tha "python nahi mila" jab ke PowerShell mein
+  `python --version` chalta tha (Python 3.14.0).** Root cause: v0.4.0
+  wala `start.bat` sirf cmd ke `where python` par bharosa karta tha —
+  PowerShell mein `python --version` App Execution Alias / App Paths se
+  bhi mil jata hai jab `where python` cmd mein fail ho. Ab detection
+  is order mein hai: (1) `.venv\Scripts\python.exe` pehle — agar .venv
+  hai to system Python PATH mein ho ya na ho, koi farq nahi; (2)
+  `where python`; (3) `python --version` (alias/App Paths case);
+  (4) `where py` / `py --version` (Python launcher — "Add Python to
+  PATH" par tick na lagi ho to bhi milta hai); (5) common install
+  locations: `%LOCALAPPDATA%\Programs\Python\Python3*`,
+  `%USERPROFILE%\AppData\Local\Programs\Python\Python3*`,
+  `%ProgramFiles%\Python3*`, `C:\Python3*`. Microsoft Store stub
+  (`...\Microsoft\WindowsApps\python.exe`) jaan boojh kar use nahi
+  hota — wo asal Python nahi, Store kholta hai.
+- **Agar phir bhi Python na mile** to ab sirf "Add Python to PATH"
+  nahi kehta — checked locations + `where python` / `where py` /
+  `py --version` / `python --version` diagnostics print karta hai aur
+  foran ka hal deta hai (`py -m venv .venv` + venv pip install +
+  `.\.venv\Scripts\python -u start.py`).
+- **`start.py` `pick_python()` (v0.4.1):** Windows par agar
+  `sys.executable` Store stub (`WindowsApps`) hai to common locations
+  mein asal Python dhoondhta hai (`_find_windows_python()`, 0-byte stub
+  skip karta hai). `.venv` ho to wahi pehle use hota hai, jaise pehle tha.
+- **pip install fail ho to saaf note:** AwaazAI Python 3.12 par test
+  hua hai; Python 3.14 par install fail ho to 3.12 use karein.
+
+### Tested (v0.4.1, this VM)
+- `python3 -m py_compile start.py backend/main.py` → OK.
+- `start._find_windows_python()` Linux par → None (sahi, Windows-only
+  code); `pick_python()` → `.venv/bin/python` (venv prefer, unchanged).
+- Batch logic static check: saare `goto` targets ke labels maujood hain
+  (`:found_py`, `:found_python`, `:install`, `:venv_failed`,
+  `:no_python`, `:run`); `cmd`/`wine` is VM par nahi hai, is liye
+  **`.bat` Windows par run karke test nahi hua — user se confirm
+  karwana baaki hai** (yehi is fix ka asal test hai).
+- Regression (v0.4.1 code, port 8123, `--no-browser`): `/api/health`
+  → 200, `/api/voices` → 54, server timeout ke baad cleanly shutdown.
+  Version bump ke baad dobara check (port 8124): `/api/health` →
+  200, version `0.4.1` sahi dikha raha hai.
+
+### Not yet
+- Cross-language dubbing (argos-translate + pairs install karna baaki),
+  Urdu cloning (Fish Speech GPU test — user ka faisla baaki), real payment.
+
 ## [0.4.0] — 2026-11-26
 
 Dubbing + Studio (Phase 2) — local-first, CPU-friendly, no paid APIs.

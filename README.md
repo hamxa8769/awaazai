@@ -1,12 +1,12 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.4.0 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.4.1 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.4.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> **Honest status v0.4.1:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
 > voices, CPU par). Voice cloning bhi **chal raha hai** (Qwen3-TTS 0.6B Base
 > via qwentts.cpp, CPU par) — user ki approval ke baad engine build hua aur
 > English clone test pass hua (30 second mein 5.44 s audio, neeche dekhein).
@@ -14,6 +14,7 @@ CHANGELOG entry — bina tag ke koi release nahi.
 > FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
 > **Naya v0.3.0: login, history, credits aur saved voices** — local SQLite
 > database, koi external service nahi, koi real payment nahi.
+> **Naya v0.4.1: start.bat Python detection fix** — `where python` fail hone par bhi `py` launcher aur common install locations se Python dhoondhta hai; `.venv` ho to system Python ki zaroorat hi nahi. Agar phir bhi na mile to diagnostics print karta hai.
 > **Naya v0.4.0: Speech-to-Text (faster-whisper tiny, CPU), Dubbing aur
 > Studio** — dubbing same-language kaam karta hai; cross-language
 > translation ke liye argos-translate abhi installed nahi hai, is liye
@@ -47,6 +48,18 @@ cloning ke liye 4–6 GB VRAM wala GPU (baad mein, Qwen3-TTS ke liye).
 **Windows — sab se asaan:** `start.bat` par double-click karein.
 Server start hoga, ready hote hi browser mein **http://127.0.0.1:8000**
 khul jayega. Band karne ke liye console mein Ctrl+C dabayein.
+
+> **Agar `start.bat` kahe "python nahi mila" jab ke PowerShell mein
+> `python --version` chalta hai (v0.4.1 se pehle ka bug):** `git pull`
+> se v0.4.1 lein — ab `start.bat` pehle `.venv` check karta hai, phir
+> `py` launcher aur common install locations
+> (`%LOCALAPPDATA%\Programs\Python\Python3*` waghera) se Python
+> dhoondhta hai. Agar phir bhi na mile to wo diagnostics print karta
+> hai. Foran ka hal (PowerShell, is folder se):
+> `py -m venv .venv`, phir `.\.venv\Scripts\pip install -r requirements.txt`,
+> phir `.\.venv\Scripts\python -u start.py`.
+> Note: AwaazAI Python 3.12 par test hua hai; Python 3.14 par pip install
+> fail ho to 3.12 use karein.
 
 **Linux / macOS:**
 ```bash

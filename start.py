@@ -37,14 +37,63 @@ DEFAULT_PORT = 8000
 HEALTH_TIMEOUT_SECONDS = 60
 
 
+def _find_windows_python() -> str | None:
+    """Windows par asal Python dhoondho (Store stub ke baghair).
+
+    `sys.executable` kabhi Microsoft Store alias
+    (%LOCALAPPDATA%\\Microsoft\\WindowsApps\\python.exe) hota hai — wo
+    asal Python nahi, Store kholta hai. Aisi soorat mein common install
+    locations mein asal python.exe dhoondho. Non-Windows par None.
+    v0.4.1: start.bat wala hi fallback, taake `python start.py` direct
+    chalane par bhi Store stub se na phansein.
+    """
+    if os.name != "nt":
+        return None
+    import glob
+
+    bases = [
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Python"),
+        os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "Local", "Programs", "Python"),
+        os.environ.get("ProgramFiles", r"C:\Program Files"),
+        r"C:\Python312",
+        r"C:\Python311",
+        r"C:\Python313",
+        r"C:\Python314",
+    ]
+    candidates: list[str] = []
+    for base in bases:
+        if not base:
+            continue
+        candidates.extend(sorted(glob.glob(os.path.join(base, "Python3*", "python.exe"))))
+        direct = os.path.join(base, "python.exe")
+        if os.path.isfile(direct):
+            candidates.append(direct)
+    for cand in candidates:
+        # Store stub 0-byte hota hai; asal python.exe ~100 KB hota hai.
+        try:
+            if os.path.isfile(cand) and os.path.getsize(cand) > 1000:
+                return cand
+        except OSError:
+            continue
+    return None
+
+
 def pick_python() -> str:
-    """Venv wala python prefer karo, warna jis python se ye script chali."""
+    """Venv wala python prefer karo, warna jis python se ye script chali.
+
+    Windows par agar sys.executable Store stub hai to common locations
+    mein asal Python dhoondho (v0.4.1 fix — start.bat bhi yehi karta hai).
+    """
     if os.name == "nt":
         venv_python = BASE_DIR / ".venv" / "Scripts" / "python.exe"
     else:
         venv_python = BASE_DIR / ".venv" / "bin" / "python"
     if venv_python.is_file():
         return str(venv_python)
+    if os.name == "nt" and "WindowsApps" in sys.executable:
+        found = _find_windows_python()
+        if found:
+            return found
     return sys.executable
 
 
