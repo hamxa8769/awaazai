@@ -31,15 +31,25 @@ let modelPollTimer = null;
 let modelsComplete = null;     // null = unknown, true/false from /api/models/status
 let appVersion = null;
 
-// ---- toasts ----
-function showToast(message, type) {
+// ---- toasts (optional Retry action on errors) ----
+function showToast(message, type, retryLabel, retryFn) {
   const box = $("toast-container");
   if (!box) return;
   const el = document.createElement("div");
   el.className = "toast" + (type ? " " + type : "");
-  el.textContent = message;
+  const span = document.createElement("span");
+  span.textContent = message;
+  el.appendChild(span);
+  if (retryFn) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "toast-retry";
+    retry.textContent = retryLabel || "Retry";
+    retry.addEventListener("click", () => { el.remove(); retryFn(); });
+    el.appendChild(retry);
+  }
   box.appendChild(el);
-  setTimeout(() => { el.remove(); }, 4500);
+  setTimeout(() => { el.remove(); }, 6000);
 }
 
 // ---- visible busy state (spinner + disabled) on any button ----
@@ -79,7 +89,10 @@ function authHeaders(extra) {
 
 function setCredits(n) {
   const loggedIn = token !== null && n !== null && n !== undefined;
-  creditsPill.textContent = loggedIn ? `Credits: ${n}` : "Credits: login";
+  const creditsText = loggedIn ? `Credits: ${n}` : "Credits: login";
+  const pillText = creditsPill.querySelector(".pill-text");
+  if (pillText) pillText.textContent = creditsText;
+  else creditsPill.textContent = creditsText;
   const side = $("sidebar-credits");
   if (side) side.textContent = loggedIn ? `Credits: ${n}` : "Credits: login to see";
   const stat = $("stat-credits");
@@ -91,11 +104,11 @@ function setCredits(n) {
 }
 
 function setAvatar() {
-  const initial = username ? username.charAt(0).toUpperCase() : "?";
+  const initial = username ? username.charAt(0).toUpperCase() : "G";
   const fa = $("footer-avatar");
-  if (fa) fa.textContent = initial;
+  if (fa) { fa.textContent = initial; fa.setAttribute("aria-label", username || "Guest"); }
   const ta = $("top-avatar");
-  if (ta) ta.textContent = initial;
+  if (ta) { ta.textContent = initial; ta.setAttribute("aria-label", username ? username : "Account (guest)"); }
   const fn = $("footer-name");
   if (fn) fn.textContent = username || "Guest";
 }
@@ -155,7 +168,7 @@ function renderAuth() {
   const loggedIn = !!token;
   $("auth-forms").classList.toggle("hidden", loggedIn);
   $("auth-logged").classList.toggle("hidden", !loggedIn);
-  logoutBtn.classList.toggle("hidden", !loggedIn);
+  if (logoutBtn) logoutBtn.classList.toggle("hidden", !loggedIn);
   const prof = $("profile-card");
   if (prof) prof.classList.toggle("hidden", !loggedIn);
   setAvatar();
@@ -203,7 +216,7 @@ function doLogout(silent) {
   setCredits(null);
   historyCache = [];
   savedVoicesCache = [];
-  $("history-list").innerHTML = '<p class="muted">Login karein to history dikhegi.</p>';
+  $("history-list").innerHTML = '<div class="empty-state"><p class="muted">Login karein to history dikhegi.</p><button data-goto="account">Login</button></div>';
   $("voices-list").innerHTML = '<p class="muted">Login karein to saved voices dikhengi.</p>';
   const ve = $("voices-empty");
   if (ve) ve.classList.add("hidden");
@@ -250,13 +263,11 @@ async function authAction(path, button) {
 
 $("login-btn").addEventListener("click", (ev) => authAction("/api/auth/login", ev.currentTarget));
 $("signup-btn").addEventListener("click", (ev) => authAction("/api/auth/signup", ev.currentTarget));
-logoutBtn.addEventListener("click", () => doLogout(false));
+if (logoutBtn) logoutBtn.addEventListener("click", () => doLogout(false));
 const logoutBtn2 = $("logout-btn-2");
 if (logoutBtn2) logoutBtn2.addEventListener("click", () => doLogout(false));
-$("more-credits-btn").addEventListener("click", () => {
-  $("auth-msg").textContent = "Credits khareedna abhi Coming Soon hai — filhal admin se rabta karein. Naye users ko 100 free credits milte hain.";
-  showToast("Credits purchase abhi Coming Soon hai.", "error");
-});
+// "Get more credits" is disabled in the markup (Coming Soon) — no handler:
+// there is no payment flow to run, and a button that always errors is a lie.
 
 // ---- change password ----
 const pwBtn = $("pw-btn");
@@ -299,14 +310,19 @@ async function loadHealth() {
     if (av) av.textContent = appVersion ? `v${appVersion}` : "unknown";
     const ae = $("about-engines");
     if (ae) ae.textContent = `Engines: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny — engine status: ${d.engine_loaded ? "Kokoro loaded" : "Kokoro not loaded yet"} · cloning: ${d.cloning || "unknown"} · STT: ${d.stt || "unknown"}`;
-    const ready = d.status === "ok" && d.model_files_present;
+    const ready = d.status === "ok" && d.engine_loaded === true;
+    const filesPresent = !!d.model_files_present;
     const pillText = pill.querySelector(".pill-text");
-    if (pillText) pillText.textContent = d.status === "ok"
-      ? `Engine: Kokoro-82M ${d.model_files_present ? "ready" : "model missing"}`
-      : "Engine: error";
-    pill.classList.toggle("ok", ready);
-    pill.classList.toggle("bad", !ready);
-    if (d.status === "ok" && !d.model_files_present) showModelCard(true);
+    // A1: the pill must report the REAL loaded state, not file presence.
+    // Files present + engine not loaded = amber "not loaded", never green.
+    pill.classList.remove("ok", "bad", "warn");
+    if (pillText) {
+      if (d.status !== "ok") { pillText.textContent = "Engine: error"; pill.classList.add("bad"); }
+      else if (ready) { pillText.textContent = "Engine: Kokoro-82M ready"; pill.classList.add("ok"); }
+      else if (filesPresent) { pillText.textContent = "Models present — engine not loaded"; pill.classList.add("warn"); }
+      else { pillText.textContent = "Engine: Kokoro-82M model missing"; pill.classList.add("bad"); }
+    }
+    if (d.status === "ok" && !filesPresent) showModelCard(true);
   } catch {
     const pillText = pill.querySelector(".pill-text");
     if (pillText) pillText.textContent = "Engine: unreachable";
@@ -475,10 +491,14 @@ async function loadVoices() {
     showVoicesError(false);
     renderVoiceGrid();
     renderLibraryGrid();
+    // /api/voices loads the Kokoro engine as a side effect, so the engine
+    // pill may have been fetched before the engine existed — re-check the
+    // real loaded state now so the pill settles on the truth.
+    loadHealth();
     if (msg.textContent.startsWith("Voices load nahi hui")) msg.textContent = "";
   } catch (e) {
     showVoicesError(true, "Voices load nahi hui: " + e.message + " (10s timeout) — dobara try karein, ya model-downloader card dekhein.");
-    showToast("Voices load nahi hui: " + e.message, "error");
+    showToast("Voices load nahi hui: " + e.message, "error", "Retry", () => { showVoicesError(false); loadVoices(); });
     renderVoiceGrid();
     renderLibraryGrid();
   }
@@ -720,7 +740,8 @@ function renderHistory() {
     (!q || `${h.type} ${h.voice} ${h.text_snippet}`.toLowerCase().includes(q)));
   list.innerHTML = "";
   if (!token) {
-    list.innerHTML = '<p class="muted">Login karein to history dikhegi.</p>';
+    // A10: logged-out history uses the real empty-state component + Login CTA.
+    list.innerHTML = '<div class="empty-state"><p class="muted">Login karein to history dikhegi.</p><button data-goto="account">Login</button></div>';
     if (empty) empty.classList.add("hidden");
     return;
   }
@@ -821,9 +842,10 @@ function renderTtsRecent() {
   if (!recent) return;
   const ttsItems = historyCache.filter((h) => h.type === "tts").slice(0, 3);
   if (!ttsItems.length) {
+    // A10: logged-out Recent TTS uses the empty-state pattern with a Login CTA.
     recent.innerHTML = token
       ? '<li class="muted">Abhi koi TTS generation nahi — generate karein.</li>'
-      : '<li class="muted">Login karein to recent TTS generations dikhengi.</li>';
+      : '<li class="empty-state"><p class="muted">Login karein to recent TTS generations dikhengi.</p><button data-goto="account">Login</button></li>';
     return;
   }
   recent.innerHTML = "";
@@ -865,8 +887,12 @@ async function loadHistory() {
     updateChecklist();
   } catch (e) {
     historyCache = [];
-    if (list) list.innerHTML = '<p class="muted">History load nahi hui (timeout ya server error) — dobara try karein.</p>';
-    showToast("History load nahi hui.", "error");
+    if (list) {
+      list.innerHTML = '<div class="error-box"><p class="muted">History load nahi hui (timeout ya server error).</p><button id="history-retry" class="btn secondary small">Retry loading history</button></div>';
+      const retry = $("history-retry");
+      if (retry) retry.addEventListener("click", loadHistory);
+    }
+    showToast("History load nahi hui.", "error", "Retry", loadHistory);
   }
 }
 
@@ -990,13 +1016,11 @@ const voicesSearch = $("voices-search");
 if (voicesSearch) voicesSearch.addEventListener("input", renderSavedVoices);
 
 // ---- generic drag-and-drop wiring for file inputs ----
+// A5: the styled <label> covering the whole dropzone opens the picker
+// natively — this wiring only handles drag-and-drop + the change event.
 function wireDropzone(zoneId, inputId, infoId, onFile) {
   const zone = $(zoneId), input = $(inputId);
   if (!zone || !input) return;
-  zone.addEventListener("click", (ev) => {
-    if (ev.target === input || ev.target.closest("button") || ev.target.closest("a")) return;
-    input.click();
-  });
   ["dragenter", "dragover"].forEach((evt) => zone.addEventListener(evt, (ev) => {
     ev.preventDefault();
     zone.classList.add("dragover");
@@ -1055,17 +1079,26 @@ async function loadCloneStatus() {
   try {
     const r = await fetchTimeout("/api/clone/status", {}, 10000);
     const d = await r.json();
-    const ready = d.state === "ready";
-    cloneStatus.textContent = ready
-      ? "Engine ready — Qwen3-TTS 0.6B Base."
+    // A2: /api/clone/status "ready" means only binary + models are PRESENT.
+    // No real generation probe has ever run, so never claim "Ready".
+    // On this VM the qwen-tts binary is known to SIGILL (POST /api/clone 502).
+    const installed = d.state === "ready";
+    const probeNote = $("clone-probe-note");
+    cloneStatus.textContent = installed
+      ? "Engine installed — not smoke-tested."
       : `Engine: ${d.state} — cloning is code-ready but the engine is not installed on this server yet (${d.setup || ""})`;
-    if (stateEl) stateEl.textContent = ready ? "Ready — Qwen3-TTS 0.6B Base." : `Not installed (state: ${d.state}).`;
+    if (stateEl) stateEl.textContent = installed
+      ? "Installed — not smoke-tested (Qwen3-TTS 0.6B Base)."
+      : `Not installed (state: ${d.state}).`;
     if (setupEl) {
-      setupEl.textContent = ready
-        ? "Engine ready — clone generate kar sakte hain."
+      setupEl.textContent = installed
+        ? "Binary + models are present, but no real clone generation has passed on this machine yet — a clone attempt may still fail. Last successful probe: none."
         : `Setup steps: ${d.setup || "qwentts.cpp build karein aur Qwen 0.6B Base GGUF models models/qwen/ mein rakhein."} Cloning is PC par tab tak nahi chalegi jab tak engine install na ho — koi fake audio nahi banega.`;
     }
-    if (card) { card.classList.toggle("ok", ready); card.classList.toggle("bad", !ready); }
+    if (probeNote) probeNote.textContent = installed
+      ? "Smoke test: never run on this machine — a real generation probe has not passed here yet."
+      : "Smoke test: not applicable — engine not installed.";
+    if (card) { card.classList.remove("ok", "bad", "warn"); card.classList.add(installed ? "warn" : "bad"); }
   } catch {
     cloneStatus.textContent = "Cloning engine status: unreachable.";
     if (stateEl) stateEl.textContent = "Unreachable — server se rabta nahi hua.";
@@ -1458,8 +1491,12 @@ function showPage(page, pushHash) {
 document.querySelectorAll(".nav-item").forEach((b) => {
   b.addEventListener("click", () => showPage(b.dataset.page));
 });
-document.querySelectorAll("[data-goto]").forEach((el) => {
-  el.addEventListener("click", (ev) => { ev.preventDefault(); showPage(el.dataset.goto); });
+// Delegated [data-goto] — also covers buttons rendered later (empty states).
+document.addEventListener("click", (ev) => {
+  const el = ev.target.closest("[data-goto]");
+  if (!el) return;
+  ev.preventDefault();
+  showPage(el.dataset.goto);
 });
 function closeSidebar() {
   const sb = $("sidebar"), ov = $("sidebar-overlay");
@@ -1472,6 +1509,9 @@ $("hamburger").addEventListener("click", () => {
 });
 $("sidebar-overlay").addEventListener("click", closeSidebar);
 $("top-avatar").addEventListener("click", () => showPage("account"));
+$("top-avatar").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showPage("account"); }
+});
 window.addEventListener("hashchange", () => {
   showPage((location.hash || "#home").slice(1), false);
 });
@@ -1545,7 +1585,8 @@ async function applyUpdate() {
     showToast("Update fail.", "error");
   }
 }
-$("update-btn").addEventListener("click", checkUpdate);
+const updateBtnSidebar = $("update-btn");
+if (updateBtnSidebar) updateBtnSidebar.addEventListener("click", checkUpdate);
 $("update-check-btn").addEventListener("click", checkUpdate);
 $("update-apply-btn").addEventListener("click", applyUpdate);
 $("update-refresh-btn").addEventListener("click", () => location.reload());
@@ -1598,11 +1639,45 @@ const fishBtn = $("fish-test-btn");
 if (fishBtn) fishBtn.addEventListener("click", () => loadFishStatus(fishBtn));
 
 // ---- Own-voice training intake (v0.8.0) ----
+// A18: Training steps advance from real state (recordings / goal / queued).
+function updateTrainingSteps(d) {
+  const hasRec = !!(d && d.count > 0);
+  const goalReached = !!(d && d.goal_reached);
+  const queued = !!(d && d.training_queued);
+  document.querySelectorAll("#training-steps li").forEach((li) => {
+    const s = Number(li.dataset.step);
+    let cls = null;
+    if (s === 1) cls = (hasRec || queued) ? "done" : "active";
+    else if (s === 2) cls = !hasRec ? null : ((goalReached || queued) ? "done" : "active");
+    else if (s === 3) cls = queued ? "done" : (goalReached ? "active" : null);
+    li.classList.remove("active", "done");
+    if (cls) li.classList.add(cls);
+  });
+}
+const trainingGotoUpload = $("training-goto-upload");
+if (trainingGotoUpload) trainingGotoUpload.addEventListener("click", () => {
+  const target = $("training-upload");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  const picker = $("training-file");
+  if (picker) picker.focus({ preventScroll: true });
+});
+const trainingFileInput = $("training-file");
+if (trainingFileInput) trainingFileInput.addEventListener("change", () => {
+  const nameEl = $("training-file-name");
+  const f = trainingFileInput.files && trainingFileInput.files[0];
+  if (nameEl) nameEl.textContent = f ? `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)` : "No file chosen — WAV/MP3, max 100 MB per file";
+});
+const dubInfoDismiss = $("dub-info-dismiss");
+if (dubInfoDismiss) dubInfoDismiss.addEventListener("click", () => {
+  const card = $("dub-info-card");
+  if (card) card.classList.add("hidden");
+});
 function renderTrainingStatus(d) {
   const total = $("training-total"), bar = $("training-progress"),
     wrap = $("training-progress-wrap"), list = $("training-list"),
     msgEl = $("training-msg"), badge = $("training-badge");
   if (!d) return;
+  updateTrainingSteps(d);
   if (total) total.textContent = `${d.total_minutes.toFixed(1)} / ${d.goal_minutes.toFixed(1)} minutes (${d.count} recordings)`;
   if (bar) bar.style.width = Math.min(100, Math.round((d.total_seconds / d.goal_seconds) * 100)) + "%";
   if (wrap) wrap.classList.remove("hidden");
@@ -1644,6 +1719,7 @@ async function loadTrainingStatus() {
   if (!token) {
     const m = $("training-msg");
     if (m) m.textContent = "Login karein to recordings upload kar sakte hain.";
+    updateTrainingSteps(null);
     return;
   }
   try {
