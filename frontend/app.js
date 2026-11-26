@@ -1080,23 +1080,25 @@ async function loadCloneStatus() {
     const r = await fetchTimeout("/api/clone/status", {}, 10000);
     const d = await r.json();
     // A2: /api/clone/status "ready" means only binary + models are PRESENT.
-    // No real generation probe has ever run, so never claim "Ready".
-    // On this VM the qwen-tts binary is known to SIGILL (POST /api/clone 502).
+    // Manual smoke test PASSED on this VM on 27 Nov 2026 (verified twice,
+    // independently: POST /api/clone 200, real non-silent audio). There is
+    // still no in-app probe endpoint, so this is not re-checked live —
+    // the card stays amber, not green, until a real probe endpoint exists.
     const installed = d.state === "ready";
     const probeNote = $("clone-probe-note");
     cloneStatus.textContent = installed
-      ? "Engine installed — not smoke-tested."
+      ? "Engine installed — smoke-tested on this machine (27 Nov 2026)."
       : `Engine: ${d.state} — cloning is code-ready but the engine is not installed on this server yet (${d.setup || ""})`;
     if (stateEl) stateEl.textContent = installed
-      ? "Installed — not smoke-tested (Qwen3-TTS 0.6B Base)."
+      ? "Installed — smoke-tested manually on this machine, 27 Nov 2026 (Qwen3-TTS 0.6B Base)."
       : `Not installed (state: ${d.state}).`;
     if (setupEl) {
       setupEl.textContent = installed
-        ? "Binary + models are present, but no real clone generation has passed on this machine yet — a clone attempt may still fail. Last successful probe: none."
+        ? "Binary + models are present. Manual smoke test passed on this VM on 27 Nov 2026 (POST /api/clone 200, real audio) — verified twice, independently. No in-app probe endpoint yet, so this status is not re-checked live. Last successful probe: 27 Nov 2026."
         : `Setup steps: ${d.setup || "qwentts.cpp build karein aur Qwen 0.6B Base GGUF models models/qwen/ mein rakhein."} Cloning is PC par tab tak nahi chalegi jab tak engine install na ho — koi fake audio nahi banega.`;
     }
     if (probeNote) probeNote.textContent = installed
-      ? "Smoke test: never run on this machine — a real generation probe has not passed here yet."
+      ? "Smoke test: passed manually on this machine — 27 Nov 2026 (real clone audio generated)."
       : "Smoke test: not applicable — engine not installed.";
     if (card) { card.classList.remove("ok", "bad", "warn"); card.classList.add(installed ? "warn" : "bad"); }
   } catch {

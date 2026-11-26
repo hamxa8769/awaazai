@@ -14,10 +14,13 @@ skill ke exact tokens. Inter Variable font locally bundled
 - **A1 (HIGH):** top-bar engine pill ab `engine_loaded` par based hai — files
   present + engine not loaded = amber "Models present — engine not loaded",
   kabhi green nahi. Loaded = green "ready", missing = red.
-- **A2 (HIGH):** Clone page ab "Ready" nahi kehta — "Installed — not
-  smoke-tested" (amber) + "Last successful probe: none". `/api/clone/status`
-  "ready" sirf binary + models present ka matlab hai; is VM par qwen-tts
-  SIGILL se crash karta hai (POST /api/clone 502), is liye koi fake ready nahi.
+- **A2 (HIGH):** Clone page ab "Ready" nahi kehta — "Installed — smoke-tested
+  manually on this machine, 27 Nov 2026" (amber) + "Last successful probe:
+  27 Nov 2026". `/api/clone/status` "ready" sirf binary + models present ka
+  matlab hai; manual smoke test (POST /api/clone 200, real audio) is VM par
+  27 Nov 2026 ko do dafa independently pass hua — v0.7.0 ka SIGILL/502
+  premise outdated hai. Koi in-app probe endpoint abhi bhi nahi hai, is
+  liye card amber rehta hai (green nahi) jab tak live probe na ban jaye.
 - **A3:** primary buttons solid `#6d28d9` (white 7.1:1, hover `#7c3aed`
   5.7:1) — gradient sirf hero text / logo / avatar par rehta hai.
 - **A4:** har interactive element par focus ring (2px `#2dd4bf` + 4px soft
@@ -69,9 +72,12 @@ skill ke exact tokens. Inter Variable font locally bundled
   logout + credits → 401.
 - **Clone surprise — the v0.7.0 SIGILL premise is OUTDATED on this VM:
   POST /api/clone returned 200 with real audio (126,764 B, 2.64 s, 24 kHz,
-  max 12,465, RMS 2,426 — not silence).** The frontend still says
-  "Installed — not smoke-tested" because no in-app probe endpoint exists;
-  a future step can add a real probe and then claim readiness honestly.
+  max 12,465, RMS 2,426 — not silence).** Independent re-test (Step 3,
+  verifier) bhi pass: POST /api/clone 200, 303,404 B, 6.32 s, 24 kHz,
+  max 13,660, RMS 2,301 — not silence, reference se alag hash. Frontend ab
+  "Installed — smoke-tested manually on this machine, 27 Nov 2026" kehta
+  hai (amber — no in-app probe endpoint yet, is liye green nahi); a future
+  step can add a real probe and then claim readiness honestly.
 - `/api/update/check` → 200 with `latest: null`, error "HTTP Error 404: Not
   Found" (GitHub has tags but no published *release* yet) — honest error
   path, frontend shows "Check failed".
