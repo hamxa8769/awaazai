@@ -18,8 +18,12 @@ Accounts (local-first, no external service, no real payment):
     GET  /api/voices/saved — own saved voices
     DELETE /api/voices/saved/{id}
 
+    POST /api/stt      — speech-to-text (faster-whisper tiny, CPU)
+    POST /api/dub       — dubbing: STT -> translate -> re-voice (login, 20 credits)
+    POST /api/studio    — long-form TTS, chunked with chapters (login, TTS rate)
+
 Pricing: TTS 1 credit per 100 characters (rounded up), Clone 10 credits
-per generation. Logged-out users can still try TTS as a demo (frontend
+per generation, Dub 20 credits per dub, Studio at the TTS rate.
 shows 5 generations per browser session); cloning needs login + consent.
 Insufficient credits -> 402 with a clear message. "Get more credits" is
 honestly Coming Soon — no real payment is wired up.
@@ -27,24 +31,26 @@ honestly Coming Soon — no real payment is wired up.
 from __future__ import annotations
 
 import io
+import json
 import secrets
 import shutil
 import tempfile
 import wave
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from backend import accounts, clone_engine, tts_engine
+from backend import accounts, clone_engine, stt_engine, studio, translate, tts_engine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
-app = FastAPI(title="AwaazAI", version="0.3.0")
+app = FastAPI(title="AwaazAI", version="0.4.0")
 
 
 def _wav_duration(wav_bytes: bytes) -> float | None:
@@ -88,9 +94,10 @@ class AuthRequest(BaseModel):
     password: str = Field(..., min_length=6, max_length=100)
 
 
-class SaveVoiceRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=50)
-    language: str = "en"
+class StudioRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    voice: str = "af_heart"
+    speed: float = Field(1.0, ge=0.5, le=2.0)
 
 
 @app.get("/api/health")
@@ -106,7 +113,11 @@ def health():
         "cloning": clone_status["state"],
         "cloning_engine": clone_status["engine"],
         "accounts": "ready",
-        "dubbing": "not-implemented",
+        "stt": stt_engine.status()["state"],
+        "stt_engine": stt_engine.ENGINE,
+        "dubbing": "ready",
+        "dubbing_translation": "argos-translate not installed — same-language dubs only",
+        "studio": "ready",
     }
 
 
@@ -281,6 +292,206 @@ async def clone(
             "X-Sample-Rate": str(sample_rate),
             "X-Engine": "qwen3-tts-0.6b-base",
             "X-Cloned-Voice": voice_label,
+            "X-Credits-Remaining": str(balance),
+        },
+    )
+
+
+# ---- Speech-to-text (free; history only when logged in) ----
+@app.post("/api/stt")
+async def stt(
+    authorization: str | None = Header(default=None),
+    audio: UploadFile = File(...),
+):
+    """Transcribe uploaded audio with faster-whisper (tiny, CPU).
+    Returns transcript + detected language + timestamped segments.
+    No credits charged. Logged-in users get the result saved to history."""
+    user = _current_user(authorization)
+    if not audio.filename:
+        raise HTTPException(status_code=400, detail="Audio file is missing.")
+    suffix = Path(audio.filename).suffix.lower()
+    if suffix not in {".wav", ".mp3", ".flac", ".ogg", ".m4a"}:
+        raise HTTPException(status_code=400, detail="Unsupported audio format — use WAV or MP3.")
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Audio file is empty.")
+    if len(data) > stt_engine.MAX_AUDIO_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Audio is too large (max {stt_engine.MAX_AUDIO_MB} MB).")
+    with tempfile.TemporaryDirectory(prefix="awaazai-stt-") as td:
+        workdir = Path(td)
+        src = workdir / f"input{suffix}"
+        src.write_bytes(data)
+        try:
+            result = stt_engine.transcribe(src, workdir)
+        except stt_engine.STTValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except stt_engine.STTUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=f"Speech-to-text failed: {exc}")
+    if user is not None and result["text"]:
+        accounts.add_history(user["id"], "stt", result["text"], "faster-whisper-tiny",
+                             result["language"], 0, result["duration_seconds"], None)
+    return result
+
+
+# ---- Dubbing (login required, 20 credits) ----
+@app.post("/api/dub")
+async def dub(
+    authorization: str | None = Header(default=None),
+    audio: UploadFile = File(...),
+    target_language: str = Form("en"),
+    voice: str = Form("af_heart"),
+    saved_voice_id: int | None = Form(default=None),
+    consent: bool = Form(False),
+):
+    """Dubbing pipeline: STT transcribe -> translate -> re-voice.
+    Same source/target language = no translation, re-voiced as-is.
+    Cross-language translation needs argos-translate + the pair
+    installed; if not, returns 501 WITH the transcript (no credits
+    charged, nothing faked). Re-voicing: Kokoro voice, or a saved
+    cloned voice (consent required, Qwen, English-style languages)."""
+    user = _require_user(authorization)
+    target_language = (target_language or "en").strip().lower()
+    if not audio.filename:
+        raise HTTPException(status_code=400, detail="Audio file is missing.")
+    suffix = Path(audio.filename).suffix.lower()
+    if suffix not in {".wav", ".mp3", ".flac", ".ogg", ".m4a"}:
+        raise HTTPException(status_code=400, detail="Unsupported audio format — use WAV or MP3.")
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Audio file is empty.")
+    if len(data) > stt_engine.MAX_AUDIO_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Audio is too large (max {stt_engine.MAX_AUDIO_MB} MB).")
+    saved_voice = None
+    if saved_voice_id is not None:
+        if not consent:
+            raise HTTPException(status_code=400, detail="Consent is required to re-voice with a saved cloned voice.")
+        saved_voice = accounts.get_saved_voice(user["id"], saved_voice_id)
+        if saved_voice is None:
+            raise HTTPException(status_code=404, detail="Saved voice nahi mili.")
+
+    with tempfile.TemporaryDirectory(prefix="awaazai-dub-") as td:
+        workdir = Path(td)
+        src = workdir / f"input{suffix}"
+        src.write_bytes(data)
+        try:
+            result = stt_engine.transcribe(src, workdir)
+        except stt_engine.STTValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except stt_engine.STTUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=f"Speech-to-text failed: {exc}")
+        transcript = result["text"]
+        source_lang = result["language"]
+        if not transcript:
+            raise HTTPException(
+                status_code=400,
+                detail="No speech was detected in the audio — transcript khaali hai, dubbing nahi ho sakti.",
+            )
+        # Translation step — before any credits are charged.
+        try:
+            translated, method = translate.translate(transcript, source_lang, target_language)
+        except translate.TranslationUnavailable as exc:
+            return JSONResponse(
+                status_code=501,
+                content={
+                    "detail": str(exc),
+                    "transcript": transcript,
+                    "detected_language": source_lang,
+                    "target_language": target_language,
+                    "translation_available": False,
+                    "credits_charged": 0,
+                },
+            )
+        # Re-voice step — credits charged here, refunded on failure.
+        try:
+            balance = accounts.deduct_credits(user["id"], accounts.DUB_COST)
+        except accounts.AuthError as exc:
+            raise HTTPException(status_code=402, detail=str(exc))
+        try:
+            if saved_voice is not None:
+                if len(translated) > clone_engine.MAX_TEXT_CHARS:
+                    raise ValueError(
+                        f"Dubbed text is too long for a cloned voice "
+                        f"({len(translated)} chars, max {clone_engine.MAX_TEXT_CHARS}). "
+                        "Use a Kokoro voice for long dubs."
+                    )
+                ref_path = Path(saved_voice["file_path"])
+                if not ref_path.exists():
+                    raise ValueError("Saved voice ki audio file nahi mili.")
+                wav_bytes, sample_rate = clone_engine.clone(
+                    ref_path, translated, target_language, consent)
+                voice_label = saved_voice["name"]
+                engine_label = "qwen3-tts-0.6b-base"
+            else:
+                wav_bytes, sample_rate, _chapters = studio.synthesize_long(
+                    translated, voice, 1.0)
+                voice_label = voice
+                engine_label = "kokoro-82m"
+        except clone_engine.CloneValidationError as exc:
+            accounts.refund_credits(user["id"], accounts.DUB_COST)
+            msg = str(exc)
+            code = 422 if msg.startswith(("Urdu is not supported", "Unsupported language")) else 400
+            raise HTTPException(status_code=code, detail=msg)
+        except clone_engine.CloneUnavailable as exc:
+            accounts.refund_credits(user["id"], accounts.DUB_COST)
+            raise HTTPException(status_code=503, detail=str(exc))
+        except (ValueError, RuntimeError) as exc:
+            accounts.refund_credits(user["id"], accounts.DUB_COST)
+            raise HTTPException(status_code=400 if isinstance(exc, ValueError) else 502,
+                                detail=str(exc))
+    file_path = _save_generated(user["id"], "dub", wav_bytes)
+    accounts.add_history(user["id"], "dub", translated, voice_label, target_language,
+                         accounts.DUB_COST, _wav_duration(wav_bytes), file_path)
+    return Response(
+        content=wav_bytes,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": 'attachment; filename="awaazai-dub.wav"',
+            "X-Sample-Rate": str(sample_rate),
+            "X-Engine": engine_label,
+            "X-Transcript": quote(transcript, safe=""),
+            "X-Translation": quote(translated, safe=""),
+            "X-Detected-Language": source_lang,
+            "X-Translation-Method": method,
+            "X-Credits-Remaining": str(balance),
+        },
+    )
+
+
+# ---- Studio (login required, TTS rate) ----
+@app.post("/api/studio")
+def studio_generate(req: StudioRequest, authorization: str | None = Header(default=None)):
+    """Long-form TTS: up to 5000 chars, chunked at sentence boundaries,
+    one concatenated WAV + chapter markers (chunk start times)."""
+    user = _require_user(authorization)
+    cost = accounts.tts_cost(req.text)
+    try:
+        balance = accounts.deduct_credits(user["id"], cost)
+    except accounts.AuthError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    try:
+        wav_bytes, sample_rate, chapters = studio.synthesize_long(req.text, req.voice, req.speed)
+    except ValueError as exc:
+        accounts.refund_credits(user["id"], cost)
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        accounts.refund_credits(user["id"], cost)
+        raise HTTPException(status_code=503, detail=str(exc))
+    file_path = _save_generated(user["id"], "studio", wav_bytes)
+    accounts.add_history(user["id"], "studio", req.text, req.voice, "en",
+                         cost, _wav_duration(wav_bytes), file_path)
+    return Response(
+        content=wav_bytes,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": 'attachment; filename="awaazai-studio.wav"',
+            "X-Sample-Rate": str(sample_rate),
+            "X-Engine": "kokoro-82m",
+            "X-Chapters": quote(json.dumps(chapters), safe=""),
+            "X-Chunks": str(len(chapters)),
             "X-Credits-Remaining": str(balance),
         },
     )

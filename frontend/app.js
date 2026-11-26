@@ -126,6 +126,19 @@ async function loadVoices() {
       voiceSel.appendChild(o);
     }
     voiceSel.value = "af_heart";
+    // Same voice list for Dubbing and Studio pickers.
+    for (const selId of ["dub-voice", "studio-voice"]) {
+      const sel = $(selId);
+      if (!sel) continue;
+      sel.innerHTML = "";
+      for (const v of d.voices) {
+        const o = document.createElement("option");
+        o.value = v.id;
+        o.textContent = `${v.name} — ${v.language_name}`;
+        sel.appendChild(o);
+      }
+      sel.value = "af_heart";
+    }
   } catch (e) {
     msg.textContent = "Voices load nahi hui: " + e.message;
   }
@@ -215,6 +228,8 @@ async function loadHistory() {
 // ---- Saved voices ----
 async function loadSavedVoices() {
   const list = $("voices-list"), sel = $("saved-voice");
+  const dubSel = $("dub-saved-voice");
+  if (dubSel) dubSel.innerHTML = '<option value="">— Kokoro voice use karein —</option>';
   if (!token) return;
   try {
     const r = await fetch("/api/voices/saved", { headers: authHeaders() });
@@ -227,6 +242,9 @@ async function loadSavedVoices() {
       const o = document.createElement("option");
       o.value = v.id; o.textContent = `${v.name} (${v.language})`;
       sel.appendChild(o);
+      const od = document.createElement("option");
+      od.value = v.id; od.textContent = `${v.name} (${v.language})`;
+      if (dubSel) dubSel.appendChild(od);
       const li = document.createElement("li");
       li.innerHTML = `<b>${v.name}</b> · ${v.language} · ${new Date(v.created_at).toLocaleString()} `;
       const del = document.createElement("button");
@@ -323,6 +341,130 @@ saveVoiceBtn.addEventListener("click", async () => {
   } catch (e) {
     cloneMsg.textContent = "Error: " + e.message;
   }
+});
+
+// ---- Speech-to-Text ----
+const sttBtn = $("stt-btn"), sttMsg = $("stt-msg"), sttCopyBtn = $("stt-copy");
+let lastTranscript = "";
+sttBtn.addEventListener("click", async () => {
+  const file = $("stt-audio").files[0];
+  if (!file) { sttMsg.textContent = "Pehle audio file chunein."; return; }
+  const form = new FormData();
+  form.append("audio", file);
+  sttBtn.disabled = true; sttMsg.textContent = "Transcribing… CPU par pehli dafa model download/load hone mein aik minute lag sakta hai.";
+  try {
+    const r = await fetch("/api/stt", { method: "POST", headers: authHeaders(), body: form });
+    if (!r.ok) throw new Error(`(${r.status}) ${(await r.json()).detail || "STT failed"}`);
+    const d = await r.json();
+    lastTranscript = d.text;
+    $("stt-text").textContent = d.text || "(koi speech nahi mili)";
+    $("stt-meta").textContent = `Language: ${d.language} (${(d.language_probability * 100).toFixed(0)}%) · Duration: ${d.duration_seconds}s · Model: ${d.model}`;
+    const segList = $("stt-segments");
+    segList.innerHTML = "";
+    for (const s of d.segments) {
+      const li = document.createElement("li");
+      li.textContent = `[${s.start}s – ${s.end}s] ${s.text}`;
+      segList.appendChild(li);
+    }
+    $("stt-result").classList.remove("hidden");
+    sttCopyBtn.classList.remove("hidden");
+    sttMsg.textContent = "Ready.";
+    if (token) loadHistory();
+  } catch (e) {
+    sttMsg.textContent = "Error: " + e.message;
+  } finally { sttBtn.disabled = false; }
+});
+sttCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(lastTranscript).then(
+    () => { sttMsg.textContent = "Transcript copy ho gaya."; },
+    () => { sttMsg.textContent = "Copy nahi ho saka — transcript ko select karke copy karein."; });
+});
+
+// ---- Dubbing ----
+const dubBtn = $("dub-btn"), dubMsg = $("dub-msg");
+let dubUrl = null;
+dubBtn.addEventListener("click", async () => {
+  if (!token) { dubMsg.textContent = "Dubbing ke liye login zaroori hai — pehle login ya signup karein (20 credits per dub)."; return; }
+  const file = $("dub-audio").files[0];
+  if (!file) { dubMsg.textContent = "Pehle audio file chunein."; return; }
+  const savedId = $("dub-saved-voice").value;
+  if (savedId && !$("dub-consent").checked) { dubMsg.textContent = "Saved cloned voice ke liye consent checkbox zaroori hai."; return; }
+  const form = new FormData();
+  form.append("audio", file);
+  form.append("target_language", $("dub-lang").value);
+  form.append("voice", $("dub-voice").value);
+  if (savedId) form.append("saved_voice_id", savedId);
+  form.append("consent", $("dub-consent").checked ? "true" : "false");
+  dubBtn.disabled = true; dubMsg.textContent = "Dubbing… pehle transcribe, phir re-voice — CPU par kuch minute lag sakte hain.";
+  try {
+    const r = await fetch("/api/dub", { method: "POST", headers: authHeaders(), body: form });
+    if (r.status === 501) {
+      const d = await r.json();
+      $("dub-transcript").textContent = d.transcript || "(khaali)";
+      $("dub-translation").textContent = "(translation nahi hui — pair installed nahi hai)";
+      $("dub-result").classList.remove("hidden");
+      throw new Error(`(501) ${d.detail}`);
+    }
+    if (r.status === 402) throw new Error((await r.json()).detail + " Get more credits abhi Coming Soon hai.");
+    if (!r.ok) throw new Error(`(${r.status}) ${(await r.json()).detail || "Dub failed"}`);
+    const blob = await r.blob();
+    if (dubUrl) URL.revokeObjectURL(dubUrl);
+    dubUrl = URL.createObjectURL(blob);
+    const player = $("dub-player");
+    player.src = dubUrl; player.classList.remove("hidden");
+    $("dub-download").href = dubUrl; $("dub-download").classList.remove("hidden");
+    $("dub-transcript").textContent = decodeURIComponent(r.headers.get("X-Transcript") || "");
+    $("dub-translation").textContent = decodeURIComponent(r.headers.get("X-Translation") || "");
+    $("dub-result").classList.remove("hidden");
+    const remaining = r.headers.get("X-Credits-Remaining");
+    if (remaining !== null) setCredits(Number(remaining));
+    dubMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB dubbed audio.`;
+    player.play().catch(() => {});
+    loadHistory();
+  } catch (e) {
+    dubMsg.textContent = "Error: " + e.message;
+  } finally { dubBtn.disabled = false; }
+});
+
+// ---- Studio ----
+const studioBtn = $("studio-btn"), studioMsg = $("studio-msg"),
+  studioSpeedEl = $("studio-speed");
+let studioUrl = null;
+studioSpeedEl.addEventListener("input", () => { $("studio-speed-val").textContent = Number(studioSpeedEl.value).toFixed(1) + "×"; });
+studioBtn.addEventListener("click", async () => {
+  if (!token) { studioMsg.textContent = "Studio ke liye login zaroori hai — pehle login ya signup karein."; return; }
+  const text = $("studio-text").value.trim();
+  if (!text) { studioMsg.textContent = "Pehle Studio ke liye text likhein."; return; }
+  studioBtn.disabled = true; studioMsg.textContent = "Generating Studio audio… lamba text chunks mein banta hai, CPU par kuch minute lag sakte hain.";
+  try {
+    const r = await fetch("/api/studio", {
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ text, voice: $("studio-voice").value, speed: Number(studioSpeedEl.value) }),
+    });
+    if (r.status === 402) throw new Error((await r.json()).detail + " Get more credits abhi Coming Soon hai.");
+    if (!r.ok) throw new Error(`(${r.status}) ${(await r.json()).detail || "Studio failed"}`);
+    const blob = await r.blob();
+    if (studioUrl) URL.revokeObjectURL(studioUrl);
+    studioUrl = URL.createObjectURL(blob);
+    const player = $("studio-player");
+    player.src = studioUrl; player.classList.remove("hidden");
+    $("studio-download").href = studioUrl; $("studio-download").classList.remove("hidden");
+    const chapters = JSON.parse(decodeURIComponent(r.headers.get("X-Chapters") || "[]"));
+    const list = $("studio-chapters");
+    list.innerHTML = "";
+    for (const c of chapters) {
+      const li = document.createElement("li");
+      li.textContent = `Chapter ${c.index} — starts ${c.start_seconds}s: ${c.text}`;
+      list.appendChild(li);
+    }
+    const remaining = r.headers.get("X-Credits-Remaining");
+    if (remaining !== null) setCredits(Number(remaining));
+    studioMsg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, ${chapters.length} chapters.`;
+    player.play().catch(() => {});
+    loadHistory();
+  } catch (e) {
+    studioMsg.textContent = "Error: " + e.message;
+  } finally { studioBtn.disabled = false; }
 });
 
 loadHealth();

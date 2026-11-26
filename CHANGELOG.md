@@ -3,6 +3,66 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.4.0] — 2026-11-26
+
+Dubbing + Studio (Phase 2) — local-first, CPU-friendly, no paid APIs.
+
+### Added
+- **Speech-to-Text (`POST /api/stt`, `backend/stt_engine.py`):**
+  faster-whisper 1.2.1, model "tiny" (~75 MB, HF se aik dafa download,
+  phir offline), CPU int8. Audio (WAV/MP3, max 5 min / 25 MB) ffmpeg se
+  16 kHz mono WAV banta hai, phir transcript + detected language +
+  timestamped segments. Free hai; logged-in users ki STT history mein
+  save hoti hai (type `stt`, 0 credits).
+- **Dubbing (`POST /api/dub`, login, 20 credits):** pipeline STT →
+  translate → re-voice. Kokoro voice ya saved cloned voice (consent
+  zaroori) mein dub hota hai. Same-language dub live hai (e.g. en→en).
+  Cross-language translation ke liye argos-translate chahiye jo abhi
+  installed nahi hai — us pair par **501 aata hai, transcript phir bhi
+  milta hai, credits nahi kat te**, kuch fake nahi hota.
+  Dubbed WAV ke sath `X-Transcript` / `X-Translation` headers aate hain.
+- **Studio (`POST /api/studio`, login, TTS rate):** 5000 characters tak
+  lamba text, sentence boundaries par ~900-char chunks, har chunk Kokoro
+  se, aik hi WAV mein join + chapter markers (har chunk ka start time,
+  `X-Chapters` header). `backend/studio.py` mein chunking; TTS engine
+  mein `synthesize_samples()` nikala gaya hai taake Studio aur `/api/tts`
+  aik hi rasta use karein.
+- **Frontend:** STT section (upload, transcript, copy, segments), Dubbing
+  section (upload, target language, Kokoro/saved voice, consent, transcript
+  + translation display), Studio section (bara textarea, voice/speed,
+  chapters list). History mein `dub` / `studio` / `stt` types dikhte hain.
+- `GET /api/health` mein ab `stt`, `dubbing` aur `studio` status bhi hain.
+
+### Fixed
+- **faster-whisper + PyAV 19.x crash (real bug, is release mein mila):**
+  faster-whisper 1.2.1 file path dene par `av.open(...,
+  metadata_errors="ignore")` call karta hai, jo PyAV 19.0.2 mein nahi
+  hai — har STT call `TypeError` se 500 hoti thi. Fix: WAV ko soundfile
+  se float32 array mein load karke array pass kiya jata hai (faster-whisper
+  ka PyAV decode path skip ho jata hai). `av==14.4.0` downgrade try kiya
+  tha — Python 3.12 ke liye wheel nahi hai, source build fail hua.
+
+### Tested (v0.4.0 server, this VM, temp test DB)
+- STT on `samples/v0.2.0/en-clone.wav` (5.44 s) → 200 in 3.7 s, transcript
+  "Hello, this is Awazayai, a natural voice made on your own laptop.",
+  language en (0.992), 1 segment 0.24–5.24 s. Tiny model ne "AwaazAI" ko
+  "Awazayai" suna — tiny-model accuracy, honest limit.
+- Dub logged-out → 401. Dub en→es → **501 + transcript, credits 99
+  unchanged**. Dub en→en (Kokoro af_heart) → 200 in 8.5 s, real WAV
+  196,652 bytes, 4.1 s, credits 99→79 (20 deducted).
+- Studio 932 chars → 200 in 53 s, 2 chunks, aik WAV 2,741,004 bytes,
+  57.1 s, chapters 0.0 s / 52.5 s, credits 79→69. Studio 1165 chars →
+  200 in 66 s, 2 chunks, 71.14 s WAV, chapters 0.0 s / 54.39 s.
+- Dub with 5 credits (needs 20) → **402**, balance unchanged (5).
+- Clone regression → 200, real WAV 172,844 bytes, 3.6 s, 10 credits.
+- Regression: `/api/health` → 200 (v0.4.0, cloning "ready", stt "ready"),
+  `/api/voices` → 54, landing `/` → 200, TTS → 200. History mein
+  tts/stt/dub/studio chaaron types dikhe.
+
+### Not yet
+- Cross-language dubbing (argos-translate + pairs install karna baaki),
+  Urdu cloning (Fish Speech GPU test — user ka faisla baaki), real payment.
+
 ## [0.3.0] — 2026-11-26
 
 Login + History + Credits + Saved Voices (local-first, no external service).

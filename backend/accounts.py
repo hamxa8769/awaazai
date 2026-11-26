@@ -26,6 +26,7 @@ DEFAULT_DB_PATH = BASE_DIR / "data" / "awaazai.db"
 
 INITIAL_CREDITS = 100
 CLONE_COST = 10
+DUB_COST = 20
 SESSION_DAYS = 30
 
 _lock = threading.Lock()
