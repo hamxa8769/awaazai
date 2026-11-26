@@ -168,6 +168,30 @@ def login(username: str, password: str) -> tuple[dict, str]:
     return user, _issue_token(row["id"])
 
 
+def change_password(user_id: int, current_password: str, new_password: str) -> None:
+    """Verify the current password (pbkdf2), then store a new salt+hash.
+    Wrong current password raises AuthError with the same generic message
+    as login (no user enumeration / no hint which part was wrong).
+    New password must be at least 6 characters."""
+    if len(new_password or "") < 6:
+        raise AuthError("Password kam se kam 6 characters ka ho.")
+    init_db()
+    with _lock, _connect() as conn:
+        row = conn.execute(
+            "SELECT salt, pw_hash FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if row is None:
+            raise AuthError("Username ya password ghalat hai.")
+        if _hash_password(current_password or "", bytes.fromhex(row["salt"])) != row["pw_hash"]:
+            raise AuthError("Username ya password ghalat hai.")
+        salt = secrets.token_bytes(16)
+        pw_hash = _hash_password(new_password, salt)
+        conn.execute(
+            "UPDATE users SET salt = ?, pw_hash = ? WHERE id = ?",
+            (salt.hex(), pw_hash, user_id),
+        )
+
+
 def authenticate(token: str | None) -> dict | None:
     """Bearer token -> user dict, or None. Expired tokens are removed."""
     if not token:

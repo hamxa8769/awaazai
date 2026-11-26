@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="toast-container" aria-live="polite"></div>
 <div class="app-shell">
   <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
   <aside class="sidebar" id="sidebar">
@@ -14,7 +15,7 @@
       <img src="/assets/logo.png" alt="AwaazAI logo" class="logo">
       <div class="brand-text">
         <span class="brand-name">Awaaz<span>AI</span></span>
-        <span class="brand-sub">v0.5.0 · local</span>
+        <span class="brand-sub">v0.6.0 · local</span>
       </div>
     </div>
     <nav class="nav" aria-label="Main navigation">
@@ -100,17 +101,17 @@
           <div class="card">
             <h3>Dubbing — live</h3>
             <p>Whisper transcribe, translate, phir wohi awaz doosri zuban mein. Same-language dub abhi kaam karta hai.</p>
-            <span class="soon">v0.5.0 — live</span>
+            <span class="soon">v0.6.0 — live</span>
           </div>
           <div class="card">
             <h3>Studio — live</h3>
             <p>Audiobook aur podcast ke liye lambi narration — chapters ke sath, aik file mein.</p>
-            <span class="soon">v0.5.0 — live</span>
+            <span class="soon">v0.6.0 — live</span>
           </div>
         </div>
         <div class="card note">
           <h3>Honest note</h3>
-          <p>Ye v0.5.0 hai: Text-to-Speech (54 fixed Kokoro voices), Voice Cloning (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone), login, history, credits, saved voices, Speech-to-Text (faster-whisper tiny), Dubbing (same-language dub live; cross-language translation ke liye argos-translate abhi installed nahi hai — 501 ke sath transcript milega) aur Studio (5000 characters tak, chapters ke sath). Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai.</p>
+          <p>Ye v0.6.0 hai: Text-to-Speech (54 fixed Kokoro voices), Voice Cloning (Qwen3-TTS 0.6B Base, CPU par ~30 second mein aik chhota clone), login, history, credits, saved voices, Speech-to-Text (faster-whisper tiny), Dubbing (same-language dub live; cross-language translation ke liye argos-translate abhi installed nahi hai — 501 ke sath transcript milega) aur Studio (5000 characters tak, chapters ke sath). Urdu Qwen mein supported nahi hai; Urdu ka Phase 0 test docs/phase0-urdu-tests.md mein hai.</p>
         </div>
       </section>
 
@@ -119,13 +120,28 @@
         <div class="demo card">
           <h2>Text to Speech</h2>
           <p class="muted">Type text, pick a voice, and hear real Kokoro-82M audio generated on this machine. <span id="tts-cost" class="muted"></span></p>
+          <div id="model-card" class="model-card hidden" role="status">
+            <h3>⚠ Kokoro models missing</h3>
+            <p id="model-card-text" class="muted">Kokoro model files is machine par nahi mileen — TTS tab tak nahi chalega jab tak models download na hon.</p>
+            <div class="row actions">
+              <button id="model-download-btn" class="btn secondary">Download Kokoro models (~338 MB)</button>
+            </div>
+            <div class="progress hidden" id="model-progress-wrap"><div class="progress-bar" id="model-progress"></div></div>
+            <p id="model-progress-text" class="muted small"></p>
+            <p id="model-manual-note" class="muted small hidden">Manual download: Kokoro-82M ki files (<b>kokoro-v1.0.onnx</b> aur <b>voices-v1.0.bin</b>) <a href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank" rel="noopener">Hugging Face — hexgrad/Kokoro-82M</a> se le kar is project ke <b>models/</b> folder mein rakhein, phir server restart karein. Details README mein hain.</p>
+          </div>
           <label for="text">Text <span class="muted">(max 1000 characters)</span></label>
           <textarea id="text" rows="4" maxlength="1000">Hello, this is AwaazAI. A natural voice, made on your own laptop.</textarea>
+          <p class="muted small"><span id="tts-count">0/1000</span> · <span id="tts-cost-preview"></span></p>
+          <label for="voice-search">Voice — search</label>
+          <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
+          <div id="voice-grid" class="voice-grid" role="listbox" aria-label="Voices"><p class="muted">Loading voices…</p></div>
+          <details class="fallback-select">
+            <summary>Voice list (fallback)</summary>
+            <label for="voice">Voice</label>
+            <select id="voice"><option value="af_heart">Loading voices…</option></select>
+          </details>
           <div class="row">
-            <div class="field">
-              <label for="voice">Voice</label>
-              <select id="voice"><option value="af_heart">Loading voices…</option></select>
-            </div>
             <div class="field">
               <label for="speed">Speed: <span id="speed-val">1.0×</span></label>
               <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
@@ -140,6 +156,10 @@
           <p class="muted small">Sample: <a href="/sample.wav" download>sample.wav</a> (generated with this same engine, voice af_heart).</p>
           <p class="muted small">Bina login ke bhi TTS demo try kar sakte hain — <span id="demo-left">5 demo generations</span> is browser session mein.</p>
         </div>
+        <div class="card">
+          <h3>Recent TTS</h3>
+          <ul id="tts-recent" class="list"><li class="muted">Login karein to recent TTS generations dikhengi.</li></ul>
+        </div>
       </section>
 
       <!-- VOICE CLONING -->
@@ -147,10 +167,28 @@
         <div class="demo card">
           <h2>Voice Cloning — apni awaz ki copy</h2>
           <p class="muted">3–10 second ki saaf recording upload karo, text likho, aur wohi awaz mein audio suno. Engine: Qwen3-TTS 0.6B Base. Cloning ke liye login zaroori hai (10 credits per clone). <span id="clone-status" class="muted">Checking cloning engine…</span></p>
+          <ol class="wizard-steps" id="clone-steps">
+            <li><span class="step-num">1</span><span>Upload reference</span></li>
+            <li><span class="step-num">2</span><span>Text</span></li>
+            <li><span class="step-num">3</span><span>Language + consent</span></li>
+            <li><span class="step-num">4</span><span>Generate</span></li>
+          </ol>
+          <div id="clone-engine-card" class="engine-card">
+            <b>Cloning engine:</b> <span id="clone-engine-state">Checking…</span>
+            <p id="clone-engine-setup" class="muted small"></p>
+          </div>
           <label for="saved-voice">Saved voice <span class="muted">(pehle se save ki hui awaz chunein, ya neeche nayi upload karein)</span></label>
           <select id="saved-voice"><option value="">— Nayi reference upload karein —</option></select>
-          <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
-          <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+          <div class="dropzone" id="ref-drop">
+            <label for="ref-audio">Reference audio <span class="muted">(WAV ya MP3, 3–30 second, saaf awaz, aik speaker)</span></label>
+            <input type="file" id="ref-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <p id="ref-info" class="muted small" role="status"></p>
+            <audio id="ref-preview" controls class="hidden"></audio>
+          </div>
+          <div class="row actions">
+            <button id="use-sample-btn" class="btn secondary">Use sample.wav as reference</button>
+          </div>
           <label for="clone-text">Text <span class="muted">(max 500 characters)</span></label>
           <textarea id="clone-text" rows="3" maxlength="500">Hello, this is my cloned voice, speaking with AwaazAI.</textarea>
           <div class="row">
@@ -177,6 +215,13 @@
             <a id="clone-download" class="btn hidden" href="#" download="awaazai-clone.wav">Download clone WAV</a>
             <button id="save-voice-btn" class="btn secondary hidden">Save this voice</button>
           </div>
+          <div id="save-voice-form" class="hidden">
+            <label for="save-voice-name">Save this voice as</label>
+            <div class="row">
+              <div class="field"><input type="text" id="save-voice-name" placeholder="My voice" maxlength="50"></div>
+              <button id="save-voice-confirm">Save voice</button>
+            </div>
+          </div>
           <p id="clone-msg" class="muted" role="status"></p>
           <audio id="clone-player" controls class="hidden"></audio>
           <p class="muted small">Cloning CPU par slow ho sakta hai — aik chhoti audio mein kuch minute lag sakte hain. Agar engine is server par installed nahi hai to saaf error milega, fake audio nahi.</p>
@@ -190,7 +235,11 @@
           <p class="muted">Save ki hui awazein yahan dikhengi. Kisi awaz ko clone section mein chunein to dobara upload nahi karna parega.</p>
           <label for="voices-search">Search saved voices</label>
           <input type="text" id="voices-search" placeholder="Voice ka naam likhein…">
-          <ul id="voices-list" class="list"><li class="muted">Login karein to saved voices dikhengi.</li></ul>
+          <div id="voices-list" class="voice-grid"><p class="muted">Login karein to saved voices dikhengi.</p></div>
+          <div id="voices-empty" class="empty-state hidden">
+            <p class="muted">Abhi koi saved voice nahi hai.</p>
+            <button id="voices-empty-cta" data-goto="clone">Clone your first voice</button>
+          </div>
         </div>
       </section>
 
@@ -199,8 +248,12 @@
         <div class="demo card">
           <h2>Dubbing — aik awaz, doosri zuban</h2>
           <p class="muted">Audio upload karo — pehle transcribe hoga, phir translate, phir chosen voice mein dub hoga. Login zaroori hai (20 credits per dub). <b>Honest note:</b> cross-language translation ke liye argos-translate abhi installed nahi hai, is liye filhal same-language dub kaam karta hai (jaise English audio ko doosri Kokoro voice mein dobara bolna). Agar translation pair missing ho to 501 error ke sath transcript phir bhi milega, credits nahi katenge.</p>
-          <label for="dub-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
-          <input type="file" id="dub-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+          <div class="dropzone" id="dub-drop">
+            <label for="dub-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
+            <input type="file" id="dub-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <p id="dub-file-info" class="muted small" role="status"></p>
+          </div>
           <div class="row">
             <div class="field">
               <label for="dub-lang">Target language</label>
@@ -229,10 +282,24 @@
             <button id="dub-btn">Dub audio</button>
             <a id="dub-download" class="btn hidden" href="#" download="awaazai-dub.wav">Download dub WAV</a>
           </div>
+          <p class="muted small">Cost: <b>20 credits</b> per dub (cross-language fail par credits nahi katenge).</p>
           <p id="dub-msg" class="muted" role="status"></p>
+          <div id="dub-501-card" class="warn-card hidden">
+            <h3>Translation pack not installed</h3>
+            <p id="dub-501-detail" class="muted"></p>
+            <p class="muted small">What is needed: <b>argos-translate</b> + is language pair ka translation pack (e.g. English → Spanish). Transcript neeche phir bhi dikh raha hai — is attempt par <b>credits nahi kate</b>.</p>
+          </div>
           <div id="dub-result" class="hidden">
-            <p><b>Transcript:</b> <span id="dub-transcript"></span></p>
-            <p><b>Translation:</b> <span id="dub-translation"></span></p>
+            <div class="split-panels">
+              <div class="panel-box">
+                <h4>Transcript <span id="dub-src-lang" class="pill hidden"></span></h4>
+                <p id="dub-transcript"></p>
+              </div>
+              <div class="panel-box">
+                <h4>Translation</h4>
+                <p id="dub-translation"></p>
+              </div>
+            </div>
           </div>
           <audio id="dub-player" controls class="hidden"></audio>
         </div>
@@ -245,6 +312,7 @@
           <p class="muted">5000 characters tak lamba text likhein — Studio sentence boundaries par chunks mein baant kar aik hi WAV banayega, chapter markers (har chunk ka start time) ke sath. Login zaroori hai, cost TTS rate par hai (1 credit per 100 characters).</p>
           <label for="studio-text">Text <span class="muted">(max 5000 characters)</span></label>
           <textarea id="studio-text" rows="8" maxlength="5000">Chapter one. Welcome to AwaazAI Studio. This is a long-form narration test, where a big piece of text becomes one single audio file. Chapter two. Each sentence becomes part of a chapter, so you can jump to any part of the recording. Chapter three. The Studio splits text at sentence boundaries, speaks every chunk in the same voice, and joins them together without gaps.</textarea>
+          <p class="muted small"><span id="studio-count">0/5000</span> · <span id="studio-words">0 words</span> · <span id="studio-cost-preview"></span></p>
           <div class="row">
             <div class="field">
               <label for="studio-voice">Voice</label>
@@ -260,6 +328,7 @@
             <a id="studio-download" class="btn hidden" href="#" download="awaazai-studio.wav">Download Studio WAV</a>
           </div>
           <p id="studio-msg" class="muted" role="status"></p>
+          <p class="muted small">Generated audio login hone par aap ki history mein save hota hai.</p>
           <ul id="studio-chapters" class="list"></ul>
           <audio id="studio-player" controls class="hidden"></audio>
         </div>
@@ -270,16 +339,22 @@
         <div class="demo card">
           <h2>Speech-to-Text — audio se transcript</h2>
           <p class="muted">Audio upload karo — faster-whisper (tiny model, CPU) transcript banayega, detected language aur timestamps ke sath. Free hai; login ho to history mein save hota hai.</p>
-          <label for="stt-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
-          <input type="file" id="stt-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+          <div class="dropzone" id="stt-drop">
+            <label for="stt-audio">Audio <span class="muted">(WAV ya MP3, max 5 minute / 25 MB)</span></label>
+            <input type="file" id="stt-audio" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*">
+            <p class="muted small">Drag &amp; drop audio here, or click to browse.</p>
+            <p id="stt-file-info" class="muted small" role="status"></p>
+          </div>
           <div class="row actions">
             <button id="stt-btn">Transcribe</button>
             <button id="stt-copy" class="btn secondary hidden">Copy transcript</button>
+            <button id="stt-download" class="btn secondary hidden">Download .txt</button>
           </div>
           <p id="stt-msg" class="muted" role="status"></p>
           <div id="stt-result" class="hidden">
-            <p><b>Transcript:</b> <span id="stt-text"></span></p>
+            <p><b>Transcript:</b> <span id="stt-lang-badge" class="pill hidden"></span> <span id="stt-text"></span></p>
             <p class="muted small" id="stt-meta"></p>
+            <p class="muted small">Segments — kisi segment par click karein to us ka text copy ho jayega.</p>
             <ul id="stt-segments" class="list"></ul>
           </div>
         </div>
@@ -290,14 +365,31 @@
         <div class="card">
           <h2>History — aap ki generations</h2>
           <p class="muted">Login ke baad ki har TTS aur Clone generation yahan save hoti hai — play, download aur delete kar sakte hain.</p>
+          <div class="chips" id="history-filters" role="group" aria-label="Filter history">
+            <button class="chip active" data-filter="all">All</button>
+            <button class="chip" data-filter="tts">TTS</button>
+            <button class="chip" data-filter="clone">Clone</button>
+            <button class="chip" data-filter="dub">Dub</button>
+            <button class="chip" data-filter="studio">Studio</button>
+            <button class="chip" data-filter="stt">STT</button>
+          </div>
           <label for="history-search">Search history</label>
           <input type="text" id="history-search" placeholder="Text ya type likhein…">
-          <ul id="history-list" class="list"><li class="muted">Login karein to history dikhegi.</li></ul>
+          <div id="history-list" class="history-list"><p class="muted">Login karein to history dikhegi.</p></div>
+          <div id="history-empty" class="empty-state hidden">
+            <p class="muted">Is filter mein koi history nahi hai.</p>
+          </div>
         </div>
       </section>
 
       <!-- ACCOUNT -->
       <section class="page" id="page-account" data-page="account">
+        <div class="card hidden" id="profile-card">
+          <h3>Profile</h3>
+          <p><b id="profile-name">—</b></p>
+          <p class="muted">Member since: <span id="profile-since">—</span></p>
+          <p class="muted">Credits balance: <b id="profile-credits">—</b></p>
+        </div>
         <div class="card">
           <h2>Account — login / signup</h2>
           <p class="muted">Login karein to 100 free credits, history aur saved voices milte hain. Bina login ke bhi TTS demo try kar sakte hain — <span id="demo-left-account">5 demo generations</span> is browser session mein.</p>
@@ -323,6 +415,24 @@
           <p id="auth-logged" class="muted hidden"></p>
         </div>
         <div class="card">
+          <h3>Change password</h3>
+          <p class="muted">Current password aur naya password likhein.</p>
+          <div class="row">
+            <div class="field">
+              <label for="pw-current">Current password</label>
+              <input type="password" id="pw-current" autocomplete="current-password">
+            </div>
+            <div class="field">
+              <label for="pw-new">New password</label>
+              <input type="password" id="pw-new" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="row actions">
+            <button id="pw-btn">Change password</button>
+          </div>
+          <p id="pw-msg" class="muted" role="status"></p>
+        </div>
+        <div class="card">
           <h3>Updates</h3>
           <p class="muted">Naya version GitHub se check karein. Update hone par server ko restart karna parta hai — button khud server restart nahi karta, ye imaandari se bataya jata hai.</p>
           <div class="row actions">
@@ -332,11 +442,18 @@
           </div>
           <p id="update-msg-account" class="muted" role="status"></p>
         </div>
+        <div class="card danger-zone">
+          <h3>Danger zone</h3>
+          <p class="muted">Logout karne par is browser ki session khatam ho jayegi — history aur saved voices dobara login par wapas milengi.</p>
+          <div class="row actions">
+            <button id="logout-btn-2" class="btn secondary">Logout</button>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer>
-      <p>AwaazAI v0.5.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
+      <p>AwaazAI v0.6.0 — Engine: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
     </footer>
   </div>
 </div>
