@@ -3,6 +3,28 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.5.0] — 2026-11-26
+
+Professional sidebar UI (ElevenLabs-style) + in-app Update button.
+
+### Added
+- **Sidebar layout — sirf frontend badla, backend API waisa hi hai.** Left sidebar (fixed, ~248px): logo + naam, nav (Home, Text to Speech, Voice Cloning, My Voices, Dubbing, Studio, Speech-to-Text, History, Account), neeche credits + username + logout + Update button. Top bar mein page title, engine status pill aur credits pill. Aik waqt mein sirf aik page dikhta hai (JS show/hide, hash routing `#tts`, `#clone` …), page reload nahi hota. Mobile par sidebar hamburger se off-canvas khulti hai.
+- **Home / Dashboard page:** welcome card, quick stats (credits, generations, saved voices), quick actions (TTS / Clone / Dub / Studio), recent generations (last 5, history se).
+- **History aur My Voices mein search filter** — sirf list filter karta hai, koi fake global search nahi.
+- **Update button (sidebar bottom + Account page):** `GET /api/update/check` — GitHub `releases/latest` se latest version (timeout 10s, no auth); offline/API fail par 200 with `error` field, kabhi crash nahi. `POST /api/update/apply` — sirf 127.0.0.1 / ::1 (warna 403); `.git` ho to `git pull origin main` (timeout 120s) aur `{updated, needs_restart: true}`; `.git` na ho to 501 + manual instructions (git clone / zip). `git pull` sirf tracked files badalta hai — `data/`, `models/` aur `.venv/` gitignored hain, pull un ko kabhi delete nahi karta.
+- **Honest restart flow:** running uvicorn process khud ko safely restart nahi kar sakta, is liye update ke baad button kehta hai "server restart karein (Ctrl+C, phir start.bat), phir page refresh karein" — Refresh page button bhi hai. Auto-restart ka dawa nahi kiya gaya.
+
+### Tested (v0.5.0, this VM, temp test DB /tmp/awaazai-v050-test.db — real data/awaazai.db untouched)
+- `/api/health` → 200, version `0.5.0`, cloning "ready", STT "ready", model files present.
+- Landing `/` → 200 (20,300 bytes); HTML mein 9 pages (`page-home` … `page-account`) aur 9 nav items maujood.
+- `/api/update/check` → 200, `{"current":"0.5.0","latest":null,"update_available":false,"error":"HTTP Error 404: Not Found"}` — is VM se GitHub API rate-limit/404 mila (direct curl bhi "API rate limit exceeded" deta hai), endpoint ne crash kiye baghair honest error diya, jaisa design tha. User ke PC par normal network par latest release milegi to `latest` + `update_available` sahi aayenge; rate limit lage to button "Check failed" dikhayega, kabhi fake "up to date" nahi.
+- `/api/update/apply` → 200, `{"updated":true,"needs_restart":true,"output":"Already up to date."}` — git pull chala, server ke baad bhi `/api/health` 200 deta raha.
+- Regression: `/api/voices` → 54, `/api/tts` → 200 real WAV 81,964 bytes (24 kHz), signup → 100 credits, `/api/history` → [], STT bina file → 422.
+- Screenshots (Chromium headless, 1280×900 + 480×900 mobile, `hidden_files/ui-verification-v0.5.0/` mein — repo mein commit nahi kiye): Home — sidebar + stats + quick actions + recent, koi overlap nahi; TTS page — aik hi section, voice "Heart — warm female" loaded, engine pill green "ready"; Account page — login form + Updates card + sidebar "Check for updates" button; Mobile — sidebar chhupi hui, hamburger dikh raha, stats aik column mein. **Windows visual check abhi bhi user se baaki hai — yehi asal test hai.**
+
+### Not yet
+- Cross-language dubbing (argos-translate + pairs install karna baaki), Urdu cloning (Fish Speech GPU test — user ka faisla baaki), real payment.
+
 ## [0.4.1] — 2026-11-26
 
 Windows start.bat Python detection fix — user ke PC par real bug.

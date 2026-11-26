@@ -23,10 +23,16 @@ function setCredits(n) {
   creditsPill.textContent = (n === null || n === undefined)
     ? "Credits: — (login karein)"
     : `Credits: ${n}`;
+  const side = $("sidebar-credits");
+  if (side) side.textContent = (n === null || n === undefined) ? "Credits: —" : `Credits: ${n}`;
+  const stat = $("stat-credits");
+  if (stat) stat.textContent = (n === null || n === undefined) ? "—" : String(n);
 }
 
 function updateDemoLabel() {
   $("demo-left").textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
+  const acc = $("demo-left-account");
+  if (acc) acc.textContent = `${Math.max(0, DEMO_LIMIT - demoUsed)} demo generations`;
   $("tts-cost").textContent = token
     ? "Logged in: 1 credit per 100 characters."
     : `Demo: is session mein ${Math.max(0, DEMO_LIMIT - demoUsed)} / ${DEMO_LIMIT} generations bache hain — login par 100 credits milte hain.`;
@@ -188,7 +194,7 @@ async function loadHistory() {
     const r = await fetch("/api/history", { headers: authHeaders() });
     if (!r.ok) throw new Error("history failed");
     const d = await r.json();
-    if (!d.history.length) { list.innerHTML = '<li class="muted">Abhi koi history nahi — pehle TTS ya Clone generate karein.</li>'; return; }
+    if (!d.history.length) { list.innerHTML = '<li class="muted">Abhi koi history nahi — pehle TTS ya Clone generate karein.</li>'; const s0 = $("stat-generations"); if (s0) s0.textContent = "0"; return; }
     list.innerHTML = "";
     for (const h of d.history) {
       const li = document.createElement("li");
@@ -220,6 +226,19 @@ async function loadHistory() {
       li.appendChild(del);
       list.appendChild(li);
     }
+    // Dashboard: recent 5 + generation count.
+    const stat = $("stat-generations");
+    if (stat) stat.textContent = String(d.history.length);
+    const recent = $("recent-list");
+    if (recent) {
+      recent.innerHTML = "";
+      for (const h of d.history.slice(0, 5)) {
+        const li = document.createElement("li");
+        const when = new Date(h.created_at).toLocaleString();
+        li.innerHTML = `<b>${h.type.toUpperCase()}</b> · ${h.voice} · ${when}<br><span class="muted">${h.text_snippet}</span>`;
+        recent.appendChild(li);
+      }
+    }
   } catch (e) {
     list.innerHTML = '<li class="muted">History load nahi hui.</li>';
   }
@@ -236,6 +255,8 @@ async function loadSavedVoices() {
     if (!r.ok) throw new Error("saved voices failed");
     const d = await r.json();
     sel.innerHTML = '<option value="">— Nayi reference upload karein —</option>';
+    const statV = $("stat-voices");
+    if (statV) statV.textContent = String(d.voices.length);
     if (!d.voices.length) { list.innerHTML = '<li class="muted">Koi saved voice nahi — clone ke baad "Save this voice" dabayein.</li>'; return; }
     list.innerHTML = "";
     for (const v of d.voices) {
@@ -472,3 +493,126 @@ loadVoices();
 loadCloneStatus();
 renderAuth();
 if (token) { refreshCredits(); loadHistory(); loadSavedVoices(); }
+
+// ---- v0.5.0: sidebar navigation (one page at a time, hash routing) ----
+const PAGES = ["home", "tts", "clone", "voices", "dub", "studio", "stt", "history", "account"];
+function showPage(page, pushHash) {
+  if (!PAGES.includes(page)) page = "home";
+  for (const p of PAGES) {
+    const sec = $("page-" + p);
+    if (sec) sec.classList.toggle("active", p === page);
+  }
+  document.querySelectorAll(".nav-item").forEach((b) => {
+    const on = b.dataset.page === page;
+    b.classList.toggle("active", on);
+    if (on) $("page-title").textContent = b.dataset.title || page;
+  });
+  if (pushHash !== false) {
+    try { history.replaceState(null, "", "#" + page); } catch { /* ignore */ }
+  }
+  if (page === "home" && token) { refreshCredits(); loadHistory(); loadSavedVoices(); }
+  if (page === "history" && token) loadHistory();
+  if (page === "voices" && token) loadSavedVoices();
+  closeSidebar();
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll(".nav-item").forEach((b) => {
+  b.addEventListener("click", () => showPage(b.dataset.page));
+});
+document.querySelectorAll("[data-goto]").forEach((el) => {
+  el.addEventListener("click", (ev) => { ev.preventDefault(); showPage(el.dataset.goto); });
+});
+function closeSidebar() {
+  const sb = $("sidebar"), ov = $("sidebar-overlay");
+  if (sb) sb.classList.remove("open");
+  if (ov) ov.classList.add("hidden");
+}
+$("hamburger").addEventListener("click", () => {
+  $("sidebar").classList.toggle("open");
+  $("sidebar-overlay").classList.toggle("hidden");
+});
+$("sidebar-overlay").addEventListener("click", closeSidebar);
+window.addEventListener("hashchange", () => {
+  showPage((location.hash || "#home").slice(1), false);
+});
+// Search filters (History / My Voices) — sirf list filter karte hain, koi fake global search nahi.
+function wireFilter(inputId, listId) {
+  const inp = $(inputId), list = $(listId);
+  if (!inp || !list) return;
+  inp.addEventListener("input", () => {
+    const q = inp.value.trim().toLowerCase();
+    list.querySelectorAll("li").forEach((li) => {
+      li.style.display = !q || li.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+}
+wireFilter("history-search", "history-list");
+wireFilter("voices-search", "voices-list");
+// ---- v0.5.0: in-app update (check + pull + prompt restart) ----
+// Honest flow: the running server cannot safely restart itself, so after
+// a successful pull we tell the user to restart (Ctrl+C, phir start.bat).
+let pendingUpdate = null;
+function setUpdateMsg(text) {
+  const a = $("update-msg"), b = $("update-msg-account");
+  if (a) a.textContent = text;
+  if (b) b.textContent = text;
+}
+function setApplyVisible(v) {
+  const btn = $("update-apply-btn");
+  if (btn) btn.classList.toggle("hidden", !v);
+}
+async function checkUpdate() {
+  setUpdateMsg("Checking for updates…");
+  setApplyVisible(false);
+  const ref = $("update-refresh-btn");
+  if (ref) ref.classList.add("hidden");
+  try {
+    const r = await fetch("/api/update/check");
+    const d = await r.json();
+    if (d.error || !d.latest) {
+      setUpdateMsg(`Check failed — ${d.error || "offline?"} (current v${d.current})`);
+      return;
+    }
+    if (d.update_available) {
+      pendingUpdate = d.latest;
+      setUpdateMsg(`Update available: v${d.latest} (current v${d.current})`);
+      setApplyVisible(true);
+    } else {
+      setUpdateMsg(`✓ Up to date — v${d.current}`);
+    }
+  } catch (e) {
+    setUpdateMsg("Check failed — server se rabta nahi hua.");
+  }
+}
+async function applyUpdate() {
+  if (!pendingUpdate) return;
+  setUpdateMsg(`Updating to v${pendingUpdate}… (git pull, data/ aur models/ ko kuch nahi hoga)`);
+  setApplyVisible(false);
+  try {
+    const r = await fetch("/api/update/apply", { method: "POST" });
+    const d = await r.json();
+    if (r.status === 501) {
+      setUpdateMsg(`Update nahi hua (501): ${d.detail}`);
+      return;
+    }
+    if (r.status === 403) {
+      setUpdateMsg("Update sirf is machine se (127.0.0.1) allowed hai.");
+      return;
+    }
+    if (!d.updated) {
+      setUpdateMsg(`Update fail: ${d.detail || "git pull fail hua."} Server waisa hi chal raha hai.`);
+      return;
+    }
+    setUpdateMsg("Update ho gaya — server restart karein (Ctrl+C, phir start.bat), phir page refresh karein.");
+    const ref = $("update-refresh-btn");
+    if (ref) ref.classList.remove("hidden");
+  } catch (e) {
+    setUpdateMsg("Update fail — server se rabta nahi hua. Server waisa hi chal raha hai.");
+  }
+}
+$("update-btn").addEventListener("click", checkUpdate);
+$("update-check-btn").addEventListener("click", checkUpdate);
+$("update-apply-btn").addEventListener("click", applyUpdate);
+$("update-refresh-btn").addEventListener("click", () => location.reload());
+// Initial page from hash (default home).
+showPage((location.hash || "#home").slice(1), false);

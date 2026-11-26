@@ -34,12 +34,15 @@ import io
 import json
 import secrets
 import shutil
+import subprocess
 import tempfile
+import urllib.error
+import urllib.request
 import wave
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -48,9 +51,9 @@ from backend import accounts, clone_engine, stt_engine, studio, translate, tts_e
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 
-app = FastAPI(title="AwaazAI", version="0.4.1")
+app = FastAPI(title="AwaazAI", version="0.5.0")
 
 
 def _wav_duration(wav_bytes: bytes) -> float | None:
@@ -590,6 +593,78 @@ def sample_wav():
     if not path.exists():
         raise HTTPException(status_code=404, detail="sample.wav not generated yet")
     return FileResponse(path, media_type="audio/wav")
+
+
+# ---- In-app update (v0.5.0) ----
+# Honest flow: check + git pull + prompt restart. The running uvicorn
+# process cannot safely restart itself from inside, so after a successful
+# pull the user restarts the server (Ctrl+C, phir start.bat) — the button
+# never claims an auto-restart it did not do.
+# Safety: `git pull` only touches tracked files. data/ (SQLite + history
+# audio), models/ and .venv/ are gitignored, so a pull NEVER deletes them.
+def _parse_version(s: str) -> tuple:
+    try:
+        return tuple(int(x) for x in str(s).lstrip("v").split(".")[:3])
+    except Exception:
+        return (0, 0, 0)
+
+
+@app.get("/api/update/check")
+def update_check():
+    """Latest GitHub release vs current version. Offline/API fail -> 200
+    with an error field, never a crash."""
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/hamxa8769/awaazai/releases/latest",
+            headers={"User-Agent": "AwaazAI-Updater", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        latest = str(data.get("tag_name", "")).lstrip("v") or None
+        return {
+            "current": VERSION,
+            "latest": latest,
+            "update_available": bool(latest) and _parse_version(latest) > _parse_version(VERSION),
+        }
+    except Exception as exc:  # offline, DNS, rate limit, bad JSON — all honest 200
+        return {"current": VERSION, "latest": None, "update_available": False, "error": str(exc)}
+
+
+@app.post("/api/update/apply")
+def update_apply(request: Request):
+    """Local-only: only 127.0.0.1 / ::1 may pull. Runs `git pull origin main`
+    (timeout 120s). Returns needs_restart=True — the user restarts the
+    server; this endpoint never restarts the process itself."""
+    host = request.client.host if request.client else None
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Update sirf is machine se (127.0.0.1) allowed hai.")
+    if not (BASE_DIR / ".git").exists():
+        return JSONResponse(
+            status_code=501,
+            content={
+                "updated": False,
+                "needs_restart": False,
+                "detail": "Ye folder git repo nahi hai (zip download). Manual update: git clone https://github.com/hamxa8769/awaazai.git karein, ya naya zip download karke models/ aur data/ copy karein.",
+            },
+        )
+    try:
+        proc = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=120,
+        )
+        output = ((proc.stdout or "") + (proc.stderr or "")).strip()[:2000]
+        return {
+            "updated": proc.returncode == 0,
+            "needs_restart": True,
+            "output": output,
+            "detail": "Update ho gaya — server restart karein (Ctrl+C, phir start.bat), phir page refresh karein."
+            if proc.returncode == 0
+            else "git pull fail hua — output neeche dekhein, server waisa hi chal raha hai.",
+        }
+    except subprocess.TimeoutExpired:
+        return {"updated": False, "needs_restart": False, "output": "", "detail": "git pull 120 second mein mukammal nahi hua (timeout). Server waisa hi chal raha hai."}
+    except Exception as exc:
+        return {"updated": False, "needs_restart": False, "output": "", "detail": f"Update fail: {exc}"}
 
 
 # Frontend (landing page + demo) and logo, served from the same server.
