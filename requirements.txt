@@ -7,6 +7,14 @@ soundfile>=0.12
 onnxruntime>=1.19
 python-multipart>=0.0.9  # UploadFile for POST /api/clone (reference audio)
 faster-whisper>=1.0  # POST /api/stt — tiny model (~75 MB, CPU, int8), downloads once from HF
+piper-tts==1.8.0  # POST /api/tts, Urdu voices (Aegis + Fasih) — PiperVoice Python API, bundled espeak-ng data
+# NOTE (v0.8.0, licence): piper-tts 1.8.0 is the maintained OHF-Voice/piper1-gpl
+# fork, GPL-3.0 (the old rhasspy/piper was MIT). AwaazAI calls it as a pip
+# dependency; the Piper component stays GPL-3.0 — get advice before paid /
+# commercial distribution of the combined app. Voice-model provenance:
+# Aegis was distilled from an OmniVoice teacher and warm-started from the
+# Fasih checkpoint (itself from a Hindi checkpoint) — check that lineage
+# before paid/commercial use. See backend/piper_engine.py + README.
 # NOTE: argos-translate is NOT installed yet — dubbing translation for
 # cross-language pairs honestly returns 501 until the operator installs
 # argos-translate + the needed language pair (see backend/translate.py).

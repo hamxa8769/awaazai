@@ -1,6 +1,6 @@
 // AwaazAI frontend — ElevenLabs-style rebuild (frontend only).
 // Calls the local FastAPI backend. No fake audio: every clip comes from
-// POST /api/tts (Kokoro-82M) or POST /api/clone (Qwen3-TTS).
+// POST /api/tts (Kokoro-82M for English, Piper for Urdu) or POST /api/clone (Qwen3-TTS).
 // Version comes from GET /api/health at runtime — never hardcoded here.
 const $ = (id) => document.getElementById(id);
 const voiceSel = $("voice"), textEl = $("text"), speedEl = $("speed"),
@@ -22,6 +22,10 @@ let savedVoicesCache = [];     // /api/voices/saved list
 let historyFilter = "all";
 let ttsGenderFilter = "all";
 let libraryGenderFilter = "all";
+let ttsLangFilter = "all";       // all | en (non-Urdu) | ur (Piper Urdu voices)
+let libraryLangFilter = "all";
+let piperComplete = null;      // null = unknown, true/false from /api/models/status
+let piperPollTimer = null;
 let modelEndpointAvailable = null; // null = unknown, true/false once probed
 let modelPollTimer = null;
 let modelsComplete = null;     // null = unknown, true/false from /api/models/status
@@ -329,6 +333,12 @@ function voiceCard(v) {
   gender.className = "voice-gender";
   gender.textContent = v.gender === "female" ? "♀ Female" : v.gender === "male" ? "♂ Male" : (v.gender || "");
   card.append(name, meta, gender);
+  if (v.engine === "piper") {
+    const badge = document.createElement("span");
+    badge.className = "voice-engine";
+    badge.textContent = "Urdu · Piper";
+    card.append(badge);
+  }
   const pick = () => {
     voiceSel.value = v.id;
     document.querySelectorAll(".voice-card").forEach((c) => c.classList.remove("selected"));
@@ -341,10 +351,11 @@ function voiceCard(v) {
   return card;
 }
 
-function filterVoices(q, gender) {
+function filterVoices(q, gender, lang) {
   const query = (q || "").trim().toLowerCase();
+  const langOk = (v) => lang === "all" || (lang === "ur" ? v.language === "ur" : v.language !== "ur");
   return allVoices.filter((v) =>
-    (gender === "all" || v.gender === gender) &&
+    (gender === "all" || v.gender === gender) && langOk(v) &&
     (!query || `${v.name} ${v.id} ${v.language_name} ${v.gender}`.toLowerCase().includes(query)));
 }
 
@@ -356,7 +367,7 @@ function renderVoiceGrid() {
     grid.innerHTML = '<p class="muted">No voices loaded yet.</p>';
     return;
   }
-  const list = filterVoices($("voice-search").value, ttsGenderFilter);
+  const list = filterVoices($("voice-search").value, ttsGenderFilter, ttsLangFilter);
   if (!list.length) {
     grid.innerHTML = '<p class="muted">Koi voice is search se match nahi karti.</p>';
     return;
@@ -372,7 +383,7 @@ function renderLibraryGrid() {
     grid.innerHTML = '<p class="muted">No voices loaded yet.</p>';
     return;
   }
-  const list = filterVoices($("library-search").value, libraryGenderFilter);
+  const list = filterVoices($("library-search").value, libraryGenderFilter, libraryLangFilter);
   if (!list.length) {
     grid.innerHTML = '<p class="muted">Koi voice is search se match nahi karti.</p>';
     return;
@@ -410,6 +421,22 @@ document.querySelectorAll("#library-gender-filters .chip").forEach((chip) => {
     document.querySelectorAll("#library-gender-filters .chip").forEach((c) => c.classList.remove("active"));
     chip.classList.add("active");
     libraryGenderFilter = chip.dataset.gender;
+    renderLibraryGrid();
+  });
+});
+document.querySelectorAll("#tts-lang-filters .chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll("#tts-lang-filters .chip").forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+    ttsLangFilter = chip.dataset.lang;
+    renderVoiceGrid();
+  });
+});
+document.querySelectorAll("#library-lang-filters .chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll("#library-lang-filters .chip").forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+    libraryLangFilter = chip.dataset.lang;
     renderLibraryGrid();
   });
 });
@@ -506,6 +533,32 @@ async function loadModelStatus() {
 function updateModelCard(d) {
   const card = $("model-card");
   if (!card || !d) return;
+  // ---- Piper Urdu group (v0.8.0): same status payload, separate UI ----
+  const p = d.piper || null;
+  if (p) {
+    piperComplete = !!p.complete;
+    const pst = $("piper-state-text"), pwrap = $("piper-progress-wrap"),
+      pbar = $("piper-progress"), ppt = $("piper-progress-text"),
+      pbtn = $("piper-download-btn");
+    const pTotal = p.total_bytes || 0, pDone = p.downloaded_bytes || 0;
+    if (p.complete) {
+      if (pst) pst.textContent = "Urdu voices downloaded — Aegis + Fasih ready (Piper).";
+      if (pwrap) pwrap.classList.add("hidden");
+      if (ppt) ppt.textContent = "";
+      if (pbtn) pbtn.classList.add("hidden");
+      if (piperPollTimer) { clearTimeout(piperPollTimer); piperPollTimer = null; }
+    } else {
+      if (pst) pst.textContent = p.downloading ? "Urdu voices downloading…" : "Urdu voices missing — download karein to Urdu TTS chalega (~126 MB).";
+      if (pbtn) pbtn.classList.remove("hidden");
+      if (pTotal > 0) {
+        if (pwrap) pwrap.classList.remove("hidden");
+        if (pbar) pbar.style.width = Math.round((pDone / pTotal) * 100) + "%";
+        if (ppt) ppt.textContent = `Downloaded ${(pDone / 1048576).toFixed(1)} / ${(pTotal / 1048576).toFixed(1)} MB (${Math.round((pDone / pTotal) * 100)}%)`;
+      }
+      if (p.downloading) piperPollTimer = setTimeout(loadModelStatus, 2000);
+      else if (piperPollTimer) { clearTimeout(piperPollTimer); piperPollTimer = null; }
+    }
+  }
   const total = d.total_bytes || 0, done = d.downloaded_bytes || 0;
   const wrap = $("model-progress-wrap"), bar = $("model-progress"), pt = $("model-progress-text");
   const mst = $("models-state-text");
@@ -568,6 +621,26 @@ if (modelBtn) modelBtn.addEventListener("click", () => startModelDownload(modelB
 const modelsBtn = $("models-download-btn");
 if (modelsBtn) modelsBtn.addEventListener("click", () => startModelDownload(modelsBtn));
 
+// ---- Piper Urdu voices download (v0.8.0): same endpoint, group=piper ----
+async function startPiperDownload(button) {
+  setBusy(button, true, "Starting download…");
+  try {
+    const r = await fetchTimeout("/api/models/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group: "piper" }),
+    }, 15000);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Download start nahi hua");
+    showToast("Urdu voices download shuru ho gaya (~126 MB).", "success");
+    loadModelStatus();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  } finally { setBusy(button, false); }
+}
+const piperBtn = $("piper-download-btn");
+if (piperBtn) piperBtn.addEventListener("click", () => startPiperDownload(piperBtn));
+
 speedEl.addEventListener("input", () => { speedVal.textContent = Number(speedEl.value).toFixed(1) + "×"; });
 textEl.addEventListener("input", updateTtsCost);
 updateTtsCost();
@@ -588,6 +661,11 @@ function addTtsGenerationCard(text, voiceId, sizeKB) {
 btn.addEventListener("click", async () => {
   const text = textEl.value.trim();
   if (!text) { msg.textContent = "Pehle kuch text likhein."; showToast("Pehle kuch text likhein.", "error"); return; }
+  if (voiceSel.value.startsWith("ur_") && piperComplete === false) {
+    msg.textContent = "Urdu voices download nahi hui — Account → Models se 'Download Urdu voices' dabayein (~126 MB).";
+    showToast("Urdu voices missing — pehle download karein.", "error");
+    return;
+  }
   if (!token && demoUsed >= DEMO_LIMIT) {
     msg.textContent = "Demo limit khatam (5/5). Login ya signup karein — 100 free credits milte hain.";
     showToast("Demo limit khatam (5/5). Login karein.", "error");
@@ -613,7 +691,7 @@ btn.addEventListener("click", async () => {
     const remaining = r.headers.get("X-Credits-Remaining");
     if (remaining !== null) setCredits(Number(remaining));
     else { demoUsed += 1; localStorage.setItem("awaazai_demo_used", String(demoUsed)); updateDemoLabel(); }
-    msg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, engine Kokoro-82M.`;
+    msg.textContent = `Ready — ${(blob.size / 1024).toFixed(0)} KB, engine ${r.headers.get("X-Engine") || "TTS"}.`;
     showToast("TTS audio ready.", "success");
     addTtsGenerationCard(text, voiceSel.value, (blob.size / 1024).toFixed(0));
     player.play().catch(() => {});
@@ -1354,7 +1432,7 @@ updateCloneSteps();
 if (token) { refreshCredits(); loadHistory(); loadSavedVoices(); }
 
 // ---- sidebar navigation (one page at a time, hash routing) ----
-const PAGES = ["home", "tts", "voices", "clone", "dub", "studio", "stt", "history", "account"];
+const PAGES = ["home", "tts", "voices", "clone", "training", "dub", "studio", "stt", "history", "account"];
 function showPage(page, pushHash) {
   if (!PAGES.includes(page)) page = "home";
   for (const p of PAGES) {
@@ -1373,6 +1451,7 @@ function showPage(page, pushHash) {
   if (page === "history" && token) loadHistory();
   if (page === "voices" && token) loadSavedVoices();
   if (page === "account" && token) loadProfile();
+  if (page === "training") { loadFishStatus(); loadTrainingStatus(); }
   closeSidebar();
   window.scrollTo(0, 0);
 }
@@ -1472,3 +1551,150 @@ $("update-apply-btn").addEventListener("click", applyUpdate);
 $("update-refresh-btn").addEventListener("click", () => location.reload());
 // Initial page from hash (default home).
 showPage((location.hash || "#home").slice(1), false);
+
+// ---- Fish Speech S2 readiness (v0.8.0) ----
+// The "Test" button re-runs the REAL hardware check (GET /api/fish-speech/status).
+// No audio is generated here, and no Fish Speech voice is offered until a
+// real GPU generation test passes.
+async function loadFishStatus(button) {
+  const verdict = $("fish-verdict"), details = $("fish-details"), badge = $("fish-badge");
+  if (button) setBusy(button, true, "Checking…");
+  try {
+    const r = await fetchTimeout("/api/fish-speech/status", {}, 15000);
+    if (!r.ok) throw new Error("Status check failed (HTTP " + r.status + ")");
+    const d = await r.json();
+    if (verdict) verdict.textContent = d.verdict;
+    if (badge) {
+      badge.textContent = d.state === "ready" ? "Ready" : "GPU test pending";
+      badge.classList.toggle("ok", d.state === "ready");
+      badge.classList.toggle("bad", d.state !== "ready");
+    }
+    if (details) {
+      const g = d.gpu || {};
+      details.innerHTML = "";
+      const rows = [
+        "GPU: " + (g.present ? `${g.name} (${g.vram_gb ?? "?"} GB VRAM, via ${g.via})` : "koi GPU nahi mila"),
+        "RAM: " + (d.ram_gb ? d.ram_gb + " GB" : "unknown") + " · Disk free: " + (d.disk_free_gb ? d.disk_free_gb + " GB" : "unknown"),
+        "fish-speech package: " + (d.package_installed ? "installed" : "not installed"),
+        "Weights: " + (d.weights && d.weights.length ? d.weights.join(", ") : "not downloaded (models/fish-speech/)"),
+        "Licence: " + d.licence,
+        "Urdu: " + d.urdu_support,
+      ];
+      for (const t of rows) {
+        const li = document.createElement("li");
+        li.className = "muted";
+        li.textContent = t;
+        details.appendChild(li);
+      }
+    }
+  } catch (e) {
+    if (verdict) verdict.textContent = "Check fail hua: " + e.message + " — dobara try karein.";
+    showToast("Fish Speech check fail: " + e.message, "error");
+  } finally {
+    if (button) setBusy(button, false);
+  }
+}
+const fishBtn = $("fish-test-btn");
+if (fishBtn) fishBtn.addEventListener("click", () => loadFishStatus(fishBtn));
+
+// ---- Own-voice training intake (v0.8.0) ----
+function renderTrainingStatus(d) {
+  const total = $("training-total"), bar = $("training-progress"),
+    wrap = $("training-progress-wrap"), list = $("training-list"),
+    msgEl = $("training-msg"), badge = $("training-badge");
+  if (!d) return;
+  if (total) total.textContent = `${d.total_minutes.toFixed(1)} / ${d.goal_minutes.toFixed(1)} minutes (${d.count} recordings)`;
+  if (bar) bar.style.width = Math.min(100, Math.round((d.total_seconds / d.goal_seconds) * 100)) + "%";
+  if (wrap) wrap.classList.remove("hidden");
+  if (badge) {
+    badge.textContent = d.training_queued ? "Training queued" : (d.goal_reached ? "Ready for training" : "Collecting recordings");
+    badge.classList.toggle("ok", d.training_queued || d.goal_reached);
+  }
+  if (msgEl) msgEl.textContent = d.training_note;
+  if (!list) return;
+  list.innerHTML = "";
+  if (!d.recordings.length) {
+    list.innerHTML = '<li class="muted">Abhi koi recording nahi.</li>';
+    return;
+  }
+  for (const r of d.recordings) {
+    const li = document.createElement("li");
+    const warn = (r.warnings || []).join(" ");
+    li.innerHTML = `<b></b> <span class="muted"></span> <button class="btn secondary small" data-del="${r.name}">Delete</button>`;
+    li.querySelector("b").textContent = r.original_name;
+    li.querySelector(".muted").textContent =
+      `${r.duration_seconds}s · ${r.sample_rate} Hz · RMS ${r.rms_db ?? "?"} dB · silence ${r.silence_ratio === null || r.silence_ratio === undefined ? "?" : Math.round(r.silence_ratio * 100) + "%"}${warn ? " · ⚠ " + warn : ""}`;
+    li.querySelector("[data-del]").addEventListener("click", async (ev) => {
+      setBusy(ev.target, true, "Deleting…");
+      try {
+        const resp = await fetch("/api/training/recordings/" + encodeURIComponent(r.name), {
+          method: "DELETE", headers: authHeaders({}),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || "Delete fail");
+        showToast("Recording delete ho gayi.", "success");
+        loadTrainingStatus();
+      } catch (e) { showToast("Error: " + e.message, "error"); }
+      finally { setBusy(ev.target, false); }
+    });
+    list.appendChild(li);
+  }
+}
+
+async function loadTrainingStatus() {
+  if (!token) {
+    const m = $("training-msg");
+    if (m) m.textContent = "Login karein to recordings upload kar sakte hain.";
+    return;
+  }
+  try {
+    const r = await fetchTimeout("/api/training/status", { headers: authHeaders({}) }, 10000);
+    if (!r.ok) return;
+    renderTrainingStatus(await r.json());
+  } catch { /* training panel is best-effort on load */ }
+}
+
+const trainingUploadBtn = $("training-upload-btn");
+if (trainingUploadBtn) trainingUploadBtn.addEventListener("click", async () => {
+  const file = $("training-file").files[0];
+  const m = $("training-msg");
+  if (!token) { showToast("Pehle login karein.", "error"); return; }
+  if (!file) { showToast("Pehle aik recording file chunein.", "error"); return; }
+  setBusy(trainingUploadBtn, true, "Uploading…");
+  if (m) m.textContent = "Uploading & validating… (duration, sample rate, loudness, silence check)";
+  try {
+    const fd = new FormData();
+    fd.append("audio", file);
+    const r = await fetch("/api/training/upload", { method: "POST", headers: authHeaders({}), body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Upload fail");
+    showToast("Recording save ho gayi — validated.", "success");
+    renderTrainingStatus(d.status);
+    $("training-file").value = "";
+  } catch (e) {
+    if (m) m.textContent = "Error: " + e.message;
+    showToast("Error: " + e.message, "error");
+  } finally { setBusy(trainingUploadBtn, false); }
+});
+
+const trainingRequestBtn = $("training-request-btn");
+if (trainingRequestBtn) trainingRequestBtn.addEventListener("click", async () => {
+  if (!token) { showToast("Pehle login karein.", "error"); return; }
+  setBusy(trainingRequestBtn, true, "Queueing…");
+  try {
+    const r = await fetch("/api/training/request", { method: "POST", headers: authHeaders({}) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Request fail");
+    showToast("Training queued — GPU server par hogi.", "success");
+    renderTrainingStatus(d);
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  } finally { setBusy(trainingRequestBtn, false); }
+});
+
+// Load the training page data on first paint + whenever it is opened.
+loadFishStatus();
+loadTrainingStatus();
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest('[data-page="training"], [data-goto="training"]');
+  if (t) setTimeout(() => { loadFishStatus(); loadTrainingStatus(); }, 50);
+});

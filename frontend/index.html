@@ -31,6 +31,9 @@
       <button class="nav-item" data-page="clone" data-title="Voice Cloning">
         <span class="nav-icon" aria-hidden="true">◎</span><span class="nav-label">Voice Cloning</span>
       </button>
+      <button class="nav-item" data-page="training" data-title="Voice Training">
+        <span class="nav-icon" aria-hidden="true">✦</span><span class="nav-label">Voice Training</span>
+      </button>
       <button class="nav-item" data-page="dub" data-title="Dubbing">
         <span class="nav-icon" aria-hidden="true">⇄</span><span class="nav-label">Dubbing</span>
       </button>
@@ -81,7 +84,7 @@
           <p class="tagline">Natural AI voice, cloning aur dubbing — ab aap ke laptop par.</p>
           <p class="tagline-en">Natural AI voices, voice cloning and dubbing — on your own laptop, with no heavy hardware.</p>
           <div class="badges">
-            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>English · 10 languages</span>
+            <span>CPU-friendly</span><span>No GPU required</span><span>Open-source engines</span><span>English + Urdu</span>
           </div>
         </div>
         <div class="card">
@@ -114,7 +117,7 @@
         </div>
         <div class="card honest-card">
           <h2>Honest status</h2>
-          <p>TTS (54 Kokoro voices), cloning (Qwen, English + 9 more languages — Urdu not supported), STT and Studio work on this machine. Cross-language dubbing still needs the translation pack. Full details: Account → About.</p>
+          <p>TTS (54 Kokoro voices + 2 Urdu voices via Piper), cloning (Qwen, English + 9 more languages — Urdu cloning not supported, Urdu TTS works), STT and Studio work on this machine. Cross-language dubbing still needs the translation pack. Full details: Account → About.</p>
         </div>
       </section>
 
@@ -147,13 +150,18 @@
           <div class="tts-side">
             <div class="card" id="voice-panel">
               <h2>Voice</h2>
-              <p class="muted small">54 Kokoro voices. Pick one — it is used for every generation on this page.</p>
+              <p class="muted small">54 Kokoro voices + 2 Urdu voices (Piper: Aegis female, Fasih male). Pick one — it is used for every generation on this page.</p>
               <label for="voice-search">Search voices</label>
-              <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
+              <input type="text" id="voice-search" placeholder="Search voices… (e.g. Heart, warm female, male, Urdu)">
               <div class="chips" id="tts-gender-filters" role="group" aria-label="Filter voices by gender">
                 <button class="chip active" data-gender="all">All</button>
                 <button class="chip" data-gender="female">Female</button>
                 <button class="chip" data-gender="male">Male</button>
+              </div>
+              <div class="chips" id="tts-lang-filters" role="group" aria-label="Filter voices by language">
+                <button class="chip active" data-lang="all">All languages</button>
+                <button class="chip" data-lang="en">English</button>
+                <button class="chip" data-lang="ur">Urdu</button>
               </div>
               <div id="voice-grid" class="voice-list" role="listbox" aria-label="Voices"><p class="muted">Loading voices…</p></div>
               <div id="voices-error" class="error-box hidden">
@@ -175,9 +183,9 @@
             </div>
             <div class="card">
               <h2>Settings</h2>
-              <label for="speed">Speed (Kokoro): <span id="speed-val">1.0×</span></label>
+              <label for="speed">Speed: <span id="speed-val">1.0×</span></label>
               <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
-              <p class="muted small">Speed is the only TTS setting the Kokoro engine supports here — there is no Stability or Similarity control in this build.</p>
+              <p class="muted small">Speed is the only TTS setting here — Kokoro voices par speed, Urdu (Piper) voices par length-scale ke tor par lagti hai. There is no Stability or Similarity control in this build.</p>
             </div>
           </div>
         </div>
@@ -195,13 +203,18 @@
           </div>
         </div>
         <div class="card" id="voices-panel-library">
-          <h2>Library — 54 Kokoro voices</h2>
+          <h2>Library — 54 Kokoro + 2 Urdu voices</h2>
           <label for="library-search">Search library voices</label>
-          <input type="text" id="library-search" placeholder="Search voices… (e.g. Heart, warm female, male)">
+          <input type="text" id="library-search" placeholder="Search voices… (e.g. Heart, warm female, male, Urdu)">
           <div class="chips" id="library-gender-filters" role="group" aria-label="Filter library voices by gender">
             <button class="chip active" data-gender="all">All</button>
             <button class="chip" data-gender="female">Female</button>
             <button class="chip" data-gender="male">Male</button>
+          </div>
+          <div class="chips" id="library-lang-filters" role="group" aria-label="Filter library voices by language">
+            <button class="chip active" data-lang="all">All languages</button>
+            <button class="chip" data-lang="en">English</button>
+            <button class="chip" data-lang="ur">Urdu</button>
           </div>
           <div id="library-grid" class="voice-grid" role="listbox" aria-label="Library voices"><p class="muted">Loading voices…</p></div>
           <div id="library-error" class="error-box hidden">
@@ -225,6 +238,13 @@
           <p class="muted">A new voice starts with the cloning wizard: upload a 3–30 second reference recording, write text, confirm consent, and generate. Cloning needs login (10 credits per clone).</p>
           <div class="row actions">
             <button data-goto="clone">Open Voice Cloning wizard</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Want a more natural Urdu voice?</h2>
+          <p class="muted">Piper fast aur light hai lekin thora robotic lag sakta hai. Fish Speech (natural, GPU chahiye) aur apni awaz ki training — teenon raste yahan compare karein.</p>
+          <div class="row actions">
+            <button data-goto="training" class="btn secondary">Voice Training — compare the 3 paths</button>
           </div>
         </div>
       </section>
@@ -276,7 +296,7 @@
               </select>
             </div>
           </div>
-          <p class="muted small"><b>Urdu note:</b> Qwen3-TTS Urdu support nahi karta — Urdu choose karne par backend 422 error dega. Urdu ke liye Fish Speech ka test abhi shuru nahi hua.</p>
+          <p class="muted small"><b>Urdu note:</b> Qwen3-TTS Urdu cloning support nahi karta — Urdu choose karne par backend 422 error dega. Urdu <b>TTS</b> ab Piper se chalta hai (Aegis female + Fasih male, Text to Speech page par Urdu filter se chunein).</p>
           <label class="consent"><input type="checkbox" id="consent"> Ye meri apni awaz hai, ya is awaz ko clone karne ki mujhe explicit permission hai. Bina ijazat kisi aur ki awaz clone karna mana hai.</label>
           <div class="row actions">
             <button id="clone-btn">Clone voice &amp; generate</button>
@@ -293,6 +313,55 @@
           <p id="clone-msg" class="muted" role="status"></p>
           <audio id="clone-player" controls class="hidden"></audio>
           <p class="muted small">Cloning CPU par slow ho sakta hai — aik chhoti audio mein kuch minute lag sakte hain. Agar engine is server par installed nahi hai to saaf error milega, fake audio nahi.</p>
+        </div>
+      </section>
+
+      <!-- VOICE TRAINING -->
+      <section class="page" id="page-training" data-page="training">
+        <div class="card">
+          <h2>Voice Training — natural awaz ke teen raste</h2>
+          <p class="muted">Step 1: rasta chunein &rarr; Step 2: recordings upload karein (own voice) &rarr; Step 3: training queue karein. Koi bhi rasta fake nahi — jo live hai wo live, jo GPU mangta hai wo GPU pending, jo queue hai wo queue.</p>
+          <div class="paths">
+            <div class="path-card">
+              <h3>1 &middot; Piper Urdu — fast &amp; light</h3>
+              <p class="pill ok">Live now</p>
+              <p class="muted">Aegis (female) + Fasih (male). CPU par chalta hai, laptop-friendly, ~63 MB per voice. Awaz saaf hai lekin thori robotic lag sakti hai — yehi is ki had hai.</p>
+              <p class="muted small">Engine: Piper 1.8.0 (GPL-3.0 fork) &middot; 22,050 Hz &middot; TTS page par Urdu filter se use karein.</p>
+              <button data-goto="tts">Try Urdu TTS</button>
+            </div>
+            <div class="path-card">
+              <h3>2 &middot; Fish Speech S2 — more natural</h3>
+              <p class="pill bad" id="fish-badge">GPU test pending</p>
+              <p class="muted">80+ languages, Urdu included, Piper se zyada natural. Lekin ~4B parameters: GPU (12 GB+ VRAM) chahiye, aur licence research / non-commercial hai.</p>
+              <p class="muted small" id="fish-verdict">Checking…</p>
+              <ul class="list small" id="fish-details"><li class="muted">Test dabayein to is machine ka asal GPU check chalega.</li></ul>
+              <div class="row actions">
+                <button id="fish-test-btn" class="btn secondary">Run GPU check</button>
+              </div>
+              <p class="muted small">Fish Speech voice tab hi milegi jab GPU machine par asal generation test pass ho — us se pehle koi fake option nahi.</p>
+            </div>
+            <div class="path-card">
+              <h3>3 &middot; Own voice — most natural</h3>
+              <p class="pill" id="training-badge">Collecting recordings</p>
+              <p class="muted">Apni awaz ko train karein — sab se natural result. 30+ minute saaf audio chahiye, aik speaker, background shor ya music nahi, normal speed, quiet room.</p>
+              <p class="muted small">Training GPU ka kaam hai — laptop CPU par instant nahi hota. Recordings queue mein jayengi, training GPU server par hogi.</p>
+              <button data-goto="training-upload">Upload recordings</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="training-upload">
+          <h2>Own-voice recordings</h2>
+          <p class="muted">Checklist: 30+ minute total &middot; aik hi speaker &middot; saaf awaz, shor/music nahi &middot; normal speed &middot; har clip kam az kam 3 second.</p>
+          <p class="muted"><b>Progress:</b> <span id="training-total">0.0 / 30.0 minutes (0 recordings)</span></p>
+          <div class="progress" id="training-progress-wrap"><div class="progress-bar" id="training-progress"></div></div>
+          <label for="training-file">Recording upload karein (WAV/MP3, max 100 MB per file)</label>
+          <input type="file" id="training-file" accept=".wav,.mp3,.flac,.ogg,.m4a">
+          <div class="row actions">
+            <button id="training-upload-btn">Upload &amp; validate</button>
+            <button id="training-request-btn" class="btn secondary">Request training</button>
+          </div>
+          <p id="training-msg" class="muted" role="status">Login karein to recordings upload kar sakte hain.</p>
+          <ul id="training-list" class="list"><li class="muted">Abhi koi recording nahi.</li></ul>
         </div>
       </section>
 
@@ -386,7 +455,7 @@
               <select id="studio-voice"><option value="af_heart">Heart — warm female</option></select>
             </div>
             <div class="field">
-              <label for="studio-speed">Speed (Kokoro): <span id="studio-speed-val">1.0×</span></label>
+              <label for="studio-speed">Speed: <span id="studio-speed-val">1.0×</span></label>
               <input type="range" id="studio-speed" min="0.5" max="2" step="0.1" value="1">
             </div>
           </div>
@@ -532,11 +601,18 @@
           </div>
           <div class="progress hidden" id="models-progress-wrap"><div class="progress-bar" id="models-progress"></div></div>
           <p id="models-progress-text" class="muted small"></p>
+          <p class="muted" id="piper-state-text">Checking Urdu voices…</p>
+          <div class="row actions">
+            <button id="piper-download-btn" class="btn secondary">Download Urdu voices — Piper (~126 MB)</button>
+          </div>
+          <div class="progress hidden" id="piper-progress-wrap"><div class="progress-bar" id="piper-progress"></div></div>
+          <p id="piper-progress-text" class="muted small"></p>
+          <p class="muted small">Urdu voices (Aegis female + Fasih male) Piper engine se chalti hain. Licence note: Piper engine GPL-3.0 fork hai; Aegis ki provenance check karni hogi paid/commercial use se pehle — details README mein hain.</p>
         </div>
         <div class="card">
           <h2>About</h2>
           <p class="muted">AwaazAI version: <b id="about-version">Loading…</b></p>
-          <p class="muted" id="about-engines">Engines: Kokoro-82M (Apache 2.0) · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
+          <p class="muted" id="about-engines">Engines: Kokoro-82M (Apache 2.0) · Urdu TTS: Piper 1.8.0 (GPL-3.0 fork) — Aegis + Fasih · Cloning: Qwen3-TTS 0.6B Base (Apache 2.0) · STT: faster-whisper tiny</p>
           <p class="muted small">Local-first · no cloud · CPU-friendly. No real payment is wired up yet — credits purchase is Coming Soon.</p>
         </div>
         <div class="card danger-zone">

@@ -3,6 +3,46 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.8.0] — 2026-11-27
+
+Piper Urdu TTS (user ne dono samples sun kar "Han" kaha) + Voice Training page — teenon natural-voice raste aik jagah, premium UI/UX, production checks ke sath.
+
+### Added — Path 1: Piper Urdu (live)
+- **Urdu TTS live:** `POST /api/tts` par `ur_aegis` (female) + `ur_fasih` (male), Piper 1.8.0 (`PiperVoice` Python API, bundled espeak-ng data), 22,050 Hz WAV, CPU-only, ~63 MB per voice. Qwen Urdu bolta hi nahi (ur → 422), is liye Piper Urdu engine hai; Kokoro English engine rehta hai.
+- **Backend:** `backend/piper_engine.py` (lazy-load, thread lock, speed → length-scale), `tts_engine.synthesize_samples` Urdu voices ko Piper par route karta hai (Studio bhi isi raste se Urdu bol sakta hai). `/api/voices` ab 56 voices deta hai (54 Kokoro + 2 Piper, `engine: "piper"`, `model_present` flag). History mein Urdu generations `language: "ur"` ke sath save hoti hain, credits wahi TTS rate (1 per 100 chars).
+- **Downloader:** `GET /api/models/status` mein Piper group (`piper.complete`, kul 128,357,852 bytes — 2 .onnx + 2 .json), `POST /api/models/download` par `{"group": "piper"}` (~126 MB, sirf 127.0.0.1). `.json` config files ~5 KB hain — downloader ka 1 MB minimum un par nahi lagta (per-file threshold fix).
+- **Frontend:** TTS + Voices mein All / English / Urdu filter chips, voice cards par "Urdu · Piper" badge, Home badge ab "English + Urdu", Account → Models mein Piper download card + progress, Urdu voice chune par models missing hon to generate se pehle saaf error + download prompt.
+- **Licence (honest, README + piper_engine.py docstring mein):** piper-tts 1.8.0 maintained OHF-Voice/piper1-gpl fork hai, **GPL-3.0** (purana rhasspy/piper MIT tha). AwaazAI isay pip dependency ke tor par call karta hai; Piper component GPL-3.0 rehta hai — combined app ki paid/commercial distribution se pehle advice lein. Voice models: dono HF listings par MIT likha hai, **lekin Aegis ki provenance kamzor hai** — OmniVoice teacher se distill, Fasih checkpoint se warm-start (jo khud Hindi checkpoint se aayi) — paid/commercial use se pehle is lineage ki licence check zaroori hai; test/personal use theek hai.
+
+### Added — Path 2: Fish Speech S2 (GPU pending, kuch fake nahi)
+- **`GET /api/fish-speech/status`:** asal readiness check — GPU (nvidia-smi / torch.cuda / /dev/nvidia*), fish-speech package, weights (`models/fish-speech/`), RAM/disk. Is VM par: **not-ready — koi GPU nahi hai** (7.7 GB RAM, 118.4 GB disk free), package not installed, weights nahi hain. Frontend Voice Training page par "Run GPU check" button yehi check dobara chalata hai — koi audio generate nahi karta, koi fake voice option nahi. Fish Speech voice tab hi milegi jab GPU machine par asal generation test pass ho. Licence: research / non-commercial.
+
+### Added — Path 3: Own-voice training (intake + validation + queue)
+- **Voice Training page (naya, sidebar mein 10th item):** teenon raston ka side-by-side comparison (Piper live / Fish Speech GPU pending / Own voice most natural) + step header + recordings intake.
+- **Endpoints:** `POST /api/training/upload` (login, WAV/MP3, max 100 MB) — asal validation: duration (kam az kam 3 s), sample rate (kam az kam 8 kHz), RMS loudness, silence ratio; warnings ke sath save hota hai. `GET /api/training/status` (total minutes vs 30-minute goal, queue state), `DELETE /api/training/recordings/{name}`, `POST /api/training/request` (kam az kam 60 s audio chahiye — kam ho to 400 ke sath saaf message). Files `data/training/<user>/` mein (gitignored) + manifest.json.
+- **Honest note:** training GPU ka kaam hai — laptop CPU par instant nahi hoti. Intake + queue live hai, training khud GPU server par hogi.
+
+### Fixed (v0.8.0 mein pakda gaya)
+- **PAGES whitelist bug:** naya Training page sidebar se click karne par Home par wapas gir jata tha — `PAGES` array mein "training" nahi tha. Fix ho gaya; ab 10 pages navigate karte hain.
+- **Speed label:** TTS/Studio mein "Speed (Kokoro)" likha tha jabke Urdu voices par speed Piper length-scale ke tor par lagti hai — label ab "Speed" hai, note mein dono engines likhe hain.
+- **TTS "Ready" message:** engine naam ab `X-Engine` header se aata hai (Piper par "piper-tts (Urdu)", Kokoro par "kokoro-82m").
+
+### Tested (v0.8.0, this VM)
+- Urdu TTS: `ur_aegis` → 200, 3.18 s, 22,050 Hz, md5 fa4f8fe66264aae6b375dcd93175c93a (original test sample 7fe2a3d8… se alag — nayi generation); `ur_fasih` → 200, 1.99 s, md5 740f49e20c4d470561fa8ce81a7d951c (original ba9ea37d… se alag). Logged-in: credits 100 → 99, history row `language: "ur"`, `credits_cost: 1`.
+- `/api/voices` → 56 (54 Kokoro + 2 Piper); `/api/models/status` → Kokoro complete 353,746,785 B + Piper complete 128,357,852 B (4 files done); HF resolve URLs temp-dir download se verify (donon .json files 5207 + 5033 bytes, status done).
+- Fish Speech: `GET /api/fish-speech/status` → not-ready, GPU absent, package not installed, weights nahi — honest.
+- Training: upload 3.18 s clip → received (RMS −15.6 dB, silence 14%, no warnings); 1 s clip → 400 reject; 5 s silent clip → accepted with warnings (100% silent, RMS −120 dB); request <60 s → 400; delete → 200, count 0 (test recordings clean kar di).
+- Regression: Kokoro TTS 200 (81,964 B), Studio Kokoro 200 (108,588 B), STT 200, Dub en→en (English source) 200 (197,676 B); Dub Urdu source → 501 (STT ne language "hi" detect ki — sahi behaviour, cross-language abhi bhi 501); `/api/health` 200 v0.8.0; server log mein 0 ERROR/Traceback.
+- Screenshots (Playwright Chromium, `hidden_files/ui-verification-v0.8.0/` — repo mein nahi): 10 pages × 1366×768 (logged-in demo) + training 480×800 — har page visually inspect ki, 0 px horizontal overflow, console errors NONE; Urdu filter par sirf 2 cards (Aegis + Fasih, Piper badge).
+- Samples: `samples/v0.8.0/ur-aegis.wav` (3.18 s) + `ur-fasih.wav` (1.99 s), test sentence "یہ آواز اے آئی ہے، اردو میں بول رہی ہے۔".
+
+### Not yet / honest limits
+- Cloning engine is VM par abhi bhi SIGILL se crash karta hai (v0.7.0 se, pre-existing) — clone generation ka VM test pass nahi hua; user ke PC par asal test hoga.
+- Fish Speech generation test GPU machine par baaki hai — is VM par GPU nahi hai.
+- Own-voice training ka asal GPU train abhi baaki hai — sirf intake + queue live hai.
+- Cross-language dubbing abhi bhi 501 (argos-translate not installed), real payment NOT added.
+- Windows `.bat`/browser test user ke PC par baaki hai.
+
 ## [0.7.0] — 2026-11-26
 
 ElevenLabs-style frontend rebuild — **frontend ONLY** (`frontend/index.html` + `styles.css` + `app.js`), backend API unchanged (sirf `VERSION` 0.6.0 → 0.7.0). Design + audit: `docs/elevenlabs-ui-research.md` (ElevenLabs sidebar order, per-page workflows, design tokens, bug audit B1–B12 — sab fix hue).

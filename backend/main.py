@@ -47,11 +47,13 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from backend import accounts, clone_engine, models_downloader, stt_engine, studio, translate, tts_engine
+from backend import (accounts, clone_engine, fish_speech, models_downloader,
+                     piper_engine, stt_engine, studio, training, translate,
+                     tts_engine)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 app = FastAPI(title="AwaazAI", version=VERSION)
 
@@ -118,6 +120,10 @@ def health():
         "engine": "kokoro-82m",
         "engine_loaded": tts_engine.engine_loaded(),
         "model_files_present": tts_engine.model_files_present(),
+        "urdu_engine": piper_engine.status()["state"],
+        "urdu_engine_name": piper_engine.status()["engine"],
+        "urdu_voices": piper_engine.status()["voices"],
+        "urdu_model_files_present": piper_engine.model_files_present(),
         "cloning": clone_status["state"],
         "cloning_engine": clone_status["engine"],
         "accounts": "ready",
@@ -132,7 +138,8 @@ def health():
 @app.get("/api/voices")
 def voices():
     try:
-        return {"engine": "kokoro-82m", "count": 54, "voices": tts_engine.list_voices()}
+        all_voices = tts_engine.list_voices()
+        return {"engine": "kokoro-82m + piper-tts (Urdu)", "count": len(all_voices), "voices": all_voices}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
@@ -217,11 +224,12 @@ def tts(req: TTSRequest, authorization: str | None = Header(default=None)):
     headers = {
         "Content-Disposition": 'attachment; filename="awaazai.wav"',
         "X-Sample-Rate": str(sample_rate),
-        "X-Engine": "kokoro-82m",
+        "X-Engine": "piper-tts (Urdu)" if piper_engine.is_piper_voice(req.voice) else "kokoro-82m",
     }
     if user is not None:
         file_path = _save_generated(user["id"], "tts", wav_bytes)
-        accounts.add_history(user["id"], "tts", req.text, req.voice, "en",
+        accounts.add_history(user["id"], "tts", req.text, req.voice,
+                             "ur" if piper_engine.is_piper_voice(req.voice) else "en",
                              cost, _wav_duration(wav_bytes), file_path)
         headers["X-Credits-Remaining"] = str(balance)
     return Response(content=wav_bytes, media_type="audio/wav", headers=headers)
@@ -244,15 +252,24 @@ def models_status():
 
 
 @app.post("/api/models/download")
-def models_download(request: Request):
+async def models_download(request: Request):
     """Local-only (127.0.0.1 / ::1, like /api/update/apply): start the
-    background Kokoro model download. Idempotent — already downloading
-    or already complete returns started=False with the current status."""
+    background model download. Idempotent — already downloading
+    or already complete returns started=False with the current status.
+    Optional JSON body: {"group": "all" | "kokoro" | "piper"} (default
+    "all" — Kokoro ~338 MB + Piper Urdu ~126 MB)."""
     host = request.client.host if request.client else None
     if host not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="Model download sirf is machine se (127.0.0.1) allowed hai.")
-    started = models_downloader.start_download()
-    return {"started": started, "status": models_downloader.status()}
+    group = "all"
+    try:
+        body = await request.json()
+        if isinstance(body, dict) and body.get("group") in ("all", "kokoro", "piper"):
+            group = body["group"]
+    except Exception:
+        pass  # no/invalid body -> default "all", backward compatible
+    started = models_downloader.start_download(group=group)
+    return {"started": started, "group": group, "status": models_downloader.status()}
 
 
 # ---- Clone (login required, 10 credits) ----
@@ -341,6 +358,68 @@ async def clone(
             "X-Credits-Remaining": str(balance),
         },
     )
+
+
+# ---- Fish Speech S2 readiness (v0.8.0) ----
+@app.get("/api/fish-speech/status")
+def fish_speech_status():
+    """Real readiness check only — GPU / package / weights. No audio is
+    generated here, and no voice is offered until a real GPU test passes."""
+    return fish_speech.status()
+
+
+# ---- Own-voice training intake (v0.8.0) ----
+@app.post("/api/training/upload")
+async def training_upload(
+    authorization: str | None = Header(default=None),
+    audio: UploadFile = File(...),
+):
+    """Upload one clean recording for own-voice training. Login required.
+    Validates duration / sample rate / loudness / silence for real and
+    stores under data/training/<user>/ (gitignored). Training itself is
+    a GPU job — this endpoint only does intake + validation + queue."""
+    user = _require_user(authorization)
+    if not audio.filename:
+        raise HTTPException(status_code=400, detail="Audio file is missing.")
+    suffix = Path(audio.filename).suffix.lower()
+    if suffix not in training.ALLOWED_SUFFIXES:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported audio format: {suffix or '(none)'} — use WAV or MP3.")
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Audio file is empty.")
+    if len(data) > training.MAX_FILE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Audio is too large (max {training.MAX_FILE_MB} MB).")
+    try:
+        entry = training.add_recording(user["id"], audio.filename, data, suffix)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"recording": entry, "status": training.status(user["id"])}
+
+
+@app.get("/api/training/status")
+def training_status(authorization: str | None = Header(default=None)):
+    user = _require_user(authorization)
+    return training.status(user["id"])
+
+
+@app.delete("/api/training/recordings/{name}")
+def training_delete(name: str, authorization: str | None = Header(default=None)):
+    user = _require_user(authorization)
+    if not training.delete_recording(user["id"], name):
+        raise HTTPException(status_code=404, detail="Recording nahi mili.")
+    return {"status": "deleted", "training": training.status(user["id"])}
+
+
+@app.post("/api/training/request")
+def training_request(authorization: str | None = Header(default=None)):
+    """Queue the training job (needs >= 60 s validated audio). The job
+    is marked queued — training runs on a GPU server, not instantly."""
+    user = _require_user(authorization)
+    try:
+        return training.request_training(user["id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ---- Speech-to-text (free; history only when logged in) ----
@@ -527,7 +606,8 @@ def studio_generate(req: StudioRequest, authorization: str | None = Header(defau
         accounts.refund_credits(user["id"], cost)
         raise HTTPException(status_code=503, detail=str(exc))
     file_path = _save_generated(user["id"], "studio", wav_bytes)
-    accounts.add_history(user["id"], "studio", req.text, req.voice, "en",
+    accounts.add_history(user["id"], "studio", req.text, req.voice,
+                         "ur" if piper_engine.is_piper_voice(req.voice) else "en",
                          cost, _wav_duration(wav_bytes), file_path)
     return Response(
         content=wav_bytes,
@@ -535,7 +615,7 @@ def studio_generate(req: StudioRequest, authorization: str | None = Header(defau
         headers={
             "Content-Disposition": 'attachment; filename="awaazai-studio.wav"',
             "X-Sample-Rate": str(sample_rate),
-            "X-Engine": "kokoro-82m",
+            "X-Engine": "piper-tts (Urdu)" if piper_engine.is_piper_voice(req.voice) else "kokoro-82m",
             "X-Chapters": quote(json.dumps(chapters), safe=""),
             "X-Chunks": str(len(chapters)),
             "X-Credits-Remaining": str(balance),

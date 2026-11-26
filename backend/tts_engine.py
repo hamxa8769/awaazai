@@ -1,8 +1,11 @@
-"""AwaazAI TTS engine — Kokoro-82M via kokoro-onnx (CPU-friendly).
+"""AwaazAI TTS engine — Kokoro-82M via kokoro-onnx (CPU-friendly) for
+English (+ 8 more Kokoro languages) and Piper via piper-tts for Urdu.
 
 Laptop-safe by design: 82M parameters, ~310 MB ONNX model, runs on CPU
-with no GPU required. No voice cloning here — Kokoro ships fixed voices
-only. Cloning (Qwen3-TTS 0.6B) is a separate, not-yet-implemented engine.
+with no GPU required. Urdu voices (ur_aegis / ur_fasih) route to
+backend/piper_engine.py (Piper, 22,050 Hz, ~63 MB per voice).
+No voice cloning here — Kokoro ships fixed voices only. Cloning
+(Qwen3-TTS 0.6B) is a separate engine (backend/clone_engine.py).
 """
 from __future__ import annotations
 
@@ -86,31 +89,55 @@ def _load():
 
 
 def list_voices() -> list[dict]:
-    """Return all 54 Kokoro voices with display metadata."""
-    kokoro = _load()
+    """All voices: 54 Kokoro voices (when Kokoro models are present)
+    plus the 2 Piper Urdu voices (always listed, with `model_present`
+    saying whether their files are downloaded). Raises RuntimeError
+    only when no voice at all is available."""
     voices = []
-    for voice_id in kokoro.get_voices():
-        lang_code, lang_name = _LANG_BY_PREFIX.get(voice_id[0], ("en-us", "English (US)"))
-        gender = "female" if len(voice_id) > 1 and voice_id[1] == "f" else "male"
-        voices.append(
-            {
-                "id": voice_id,
-                "name": _DISPLAY_NAMES.get(voice_id, voice_id),
-                "gender": gender,
-                "language": lang_code,
-                "language_name": lang_name,
-                "cloning": False,  # Kokoro voices are fixed, not cloned
-            }
+    try:
+        kokoro = _load()
+        for voice_id in kokoro.get_voices():
+            lang_code, lang_name = _LANG_BY_PREFIX.get(voice_id[0], ("en-us", "English (US)"))
+            gender = "female" if len(voice_id) > 1 and voice_id[1] == "f" else "male"
+            voices.append(
+                {
+                    "id": voice_id,
+                    "name": _DISPLAY_NAMES.get(voice_id, voice_id),
+                    "gender": gender,
+                    "language": lang_code,
+                    "language_name": lang_name,
+                    "engine": "kokoro",
+                    "cloning": False,  # Kokoro voices are fixed, not cloned
+                }
+            )
+    except RuntimeError:
+        pass  # Kokoro missing — Piper voices below may still be available
+    from backend import piper_engine
+
+    voices.extend(piper_engine.list_voices())
+    if not voices:
+        raise RuntimeError(
+            "No TTS voices available. Download the Kokoro model files "
+            "(models/) or the Piper Urdu voices (models/piper/) — see README.md."
         )
     return voices
 
 
 def voice_lang(voice_id: str) -> str:
+    if voice_id.startswith("ur_"):
+        return "ur"
     return _LANG_BY_PREFIX.get(voice_id[0], ("en-us",))[0]
 
 
 def synthesize_samples(text: str, voice: str = "af_heart", speed: float = 1.0) -> tuple:
-    """Text -> (samples, sample_rate). Shared by /api/tts and Studio."""
+    """Text -> (samples, sample_rate). Shared by /api/tts and Studio.
+    Urdu voices (ur_aegis / ur_fasih) route to Piper (22,050 Hz);
+    everything else routes to Kokoro (24,000 Hz)."""
+    # Piper Urdu voices — validated inside piper_engine.
+    if voice.startswith("ur_"):
+        from backend import piper_engine
+
+        return piper_engine.synthesize_samples(text, voice, speed)
     text = (text or "").strip()
     if not text:
         raise ValueError("Text is empty.")

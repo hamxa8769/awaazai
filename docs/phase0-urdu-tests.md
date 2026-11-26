@@ -171,5 +171,9 @@ superseded by the v0.2.1 run above.)
 1. ~~**Approve building/running qwentts.cpp**~~ — **DONE 2026-11-26
    ~16:37 PKT** ("Han, qwentts.cpp build karke English clone test
    chalao"). Engine built, English clone test passed in v0.2.1.
-2. **Urdu direction (still open):** Fish Speech S2 GPU test in Phase 2,
-   or accept English-only cloning and revisit Urdu later?
+2. **Urdu direction — DECIDED 2026-11-27 (v0.8.0):** user ne Piper ke dono
+   samples sun kar "Han" kaha — Piper Urdu TTS (Aegis + Fasih) AwaazAI v0.8.0
+   mein live hai. Fish Speech S2 ab "more natural" backup rasta hai (GPU test
+   pending — is VM par GPU nahi hai); own-voice training intake + queue bhi
+   v0.8.0 mein live hai. Urdu *cloning* abhi bhi nahi hai (Qwen Urdu nahi
+   bolta) — Urdu TTS Piper se, cloning English-only.

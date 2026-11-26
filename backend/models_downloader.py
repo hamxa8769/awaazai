@@ -31,7 +31,28 @@ RELEASE_BASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/mo
 
 FILE_NAMES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 
+# Piper Urdu voices (v0.8.0) — Hugging Face `resolve/main` URLs, fetched
+# into models/piper/. Two .onnx files (~63 MB + ~64 MB) + their .json
+# configs (~5 KB each). Licence note: both HF listings say MIT, but
+# Aegis was distilled from an OmniVoice teacher and warm-started from
+# the Fasih checkpoint (itself from a Hindi checkpoint) — check that
+# lineage before paid/commercial use (see backend/piper_engine.py).
+PIPER_BASE_AEGIS = "https://huggingface.co/mahwizzzz/piper-voice-ur-aegis-female/resolve/main"
+PIPER_BASE_FASIH = "https://huggingface.co/IhorShevchuk/piper-voice-ur-fasih/resolve/main"
+PIPER_FILES = (
+    ("piper/ur_PK-aegis_female-medium.onnx", f"{PIPER_BASE_AEGIS}/ur_PK-aegis_female-medium.onnx"),
+    ("piper/ur_PK-aegis_female-medium.onnx.json", f"{PIPER_BASE_AEGIS}/ur_PK-aegis_female-medium.onnx.json"),
+    ("piper/ur_PK-fasih-medium-model.onnx", f"{PIPER_BASE_FASIH}/ur_PK-fasih-medium-model.onnx"),
+    ("piper/ur_PK-fasih-medium-model.onnx.json", f"{PIPER_BASE_FASIH}/ur_PK-fasih-medium-model.onnx.json"),
+)
+
 MIN_COMPLETE_SIZE = 1 * 1024 * 1024  # 1 MB — a real model file is far larger
+
+
+def _min_size(name: str) -> int:
+    """Complete-file threshold: model binaries need > 1 MB, but Piper
+    voice configs are tiny JSON files (~5 KB)."""
+    return 100 if name.endswith(".json") else MIN_COMPLETE_SIZE
 CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
 
 _lock = threading.RLock()  # RLock: start_download() calls status() while holding it
@@ -49,12 +70,40 @@ def _default_files() -> list[dict]:
     ]
 
 
+def _piper_files() -> list[dict]:
+    return [{"name": name, "url": url} for name, url in PIPER_FILES]
+
+
+def _all_files() -> list[dict]:
+    return _default_files() + _piper_files()
+
+
+def _group_status(file_defs: list[dict], models_dir: Path) -> dict:
+    """Status dict for one file group (Kokoro or Piper)."""
+    with _lock:
+        infos = []
+        for f in file_defs:
+            info = _file_state(f["name"], f["url"], models_dir)
+            _state[f["name"]] = info
+            infos.append(dict(info))
+    total = sum(i["size_bytes"] or i["downloaded_bytes"] for i in infos)
+    downloaded = sum(i["downloaded_bytes"] for i in infos)
+    return {
+        "files": infos,
+        "total_bytes": total,
+        "downloaded_bytes": downloaded,
+        "complete": all(i["status"] == "done" for i in infos),
+        "downloading": any(i["status"] == "downloading" for i in infos),
+        "engine_ready": all(i["status"] == "done" for i in infos),
+    }
+
+
 def _file_state(name: str, url: str, models_dir: Path) -> dict:
     """Reconcile one file's in-memory state with what is on disk."""
     target = models_dir / name
     part = models_dir / f"{name}.part"
     prev = _state.get(name, {})
-    if target.exists() and target.stat().st_size > MIN_COMPLETE_SIZE:
+    if target.exists() and target.stat().st_size > _min_size(name):
         size = target.stat().st_size
         return {
             "name": name,
@@ -90,7 +139,12 @@ def _file_state(name: str, url: str, models_dir: Path) -> dict:
 
 def status(models_dir: Path | None = None, files: list[dict] | None = None) -> dict:
     """Current download state. `models_dir`/`files` are test hooks only;
-    production callers use status() with no arguments."""
+    production callers use status() with no arguments.
+
+    Top-level fields still describe the Kokoro group only (backward
+    compatible — the frontend hides the Kokoro model card on
+    ``complete``). The Piper group lives under ``piper``; ``all_complete``
+    is True only when both groups are done."""
     models_dir = Path(models_dir) if models_dir is not None else MODELS_DIR
     file_defs = files if files is not None else _default_files()
     with _lock:
@@ -101,7 +155,7 @@ def status(models_dir: Path | None = None, files: list[dict] | None = None) -> d
             infos.append(dict(info))
     total = sum(i["size_bytes"] or i["downloaded_bytes"] for i in infos)
     downloaded = sum(i["downloaded_bytes"] for i in infos)
-    return {
+    result = {
         "files": infos,
         "total_bytes": total,
         "downloaded_bytes": downloaded,
@@ -109,15 +163,23 @@ def status(models_dir: Path | None = None, files: list[dict] | None = None) -> d
         "downloading": any(i["status"] == "downloading" for i in infos),
         "engine_ready": all(i["status"] == "done" for i in infos),
     }
+    if files is None:
+        # Production call: also report the Piper group (never overrides
+        # the Kokoro top-level fields above).
+        piper = _group_status(_piper_files(), models_dir)
+        result["piper"] = piper
+        result["all_complete"] = result["complete"] and piper["complete"]
+        result["piper_complete"] = piper["complete"]
+    return result
 
 
 def _download_one(name: str, url: str, models_dir: Path) -> None:
     """Download one file (called on the worker thread). Raises on failure."""
     target = models_dir / name
     part = models_dir / f"{name}.part"
-    models_dir.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
-    if target.exists() and target.stat().st_size > MIN_COMPLETE_SIZE:
+    if target.exists() and target.stat().st_size > _min_size(name):
         with _lock:
             _state[name] = _file_state(name, url, models_dir)
         return
@@ -165,10 +227,10 @@ def _download_one(name: str, url: str, models_dir: Path) -> None:
             raise RuntimeError(f"Download interrupted for {name}: {exc}") from exc
 
     # Verify, then atomic rename (.part -> final, same filesystem).
-    if not part.exists() or part.stat().st_size <= MIN_COMPLETE_SIZE:
+    if not part.exists() or part.stat().st_size <= _min_size(name):
         size = part.stat().st_size if part.exists() else 0
         raise RuntimeError(
-            f"Downloaded {name} failed verification: {size} bytes (need > 1 MB)."
+            f"Downloaded {name} failed verification: {size} bytes (need > {_min_size(name)} B)."
         )
     os.replace(part, target)
     with _lock:
@@ -205,13 +267,22 @@ def _worker(models_dir: Path, file_defs: list[dict]) -> None:
 
 
 def start_download(models_dir: Path | None = None,
-                   files: list[dict] | None = None) -> bool:
+                   files: list[dict] | None = None,
+                   group: str = "all") -> bool:
     """Start the background download thread once. Returns True only if
     a thread was actually started; False if already downloading or
-    everything is already complete. `models_dir`/`files` are test hooks."""
+    everything is already complete. `models_dir`/`files` are test hooks.
+    `group`: "all" (Kokoro + Piper, the default), "kokoro" or "piper"."""
     global _thread
     models_dir = Path(models_dir) if models_dir is not None else MODELS_DIR
-    file_defs = files if files is not None else _default_files()
+    if files is not None:
+        file_defs = files
+    elif group == "kokoro":
+        file_defs = _default_files()
+    elif group == "piper":
+        file_defs = _piper_files()
+    else:
+        file_defs = _all_files()
     with _lock:
         if _thread is not None and _thread.is_alive():
             return False
