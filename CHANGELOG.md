@@ -3,6 +3,56 @@
 Version rule (Muuk jaisa): har release mein **VERSION bump + git tag + is
 CHANGELOG mein entry**. Bina tag ke koi release nahi.
 
+## [0.3.0] — 2026-11-26
+
+Login + History + Credits + Saved Voices (local-first, no external service).
+
+### Added
+- **Accounts (`backend/accounts.py`, SQLite `data/awaazai.db`, gitignored):**
+  `POST /api/auth/signup` (100 free credits), `POST /api/auth/login`,
+  `POST /api/auth/logout`, `GET /api/auth/me`. Password pbkdf2
+  (200,000 rounds, random salt) se hash hota hai — plain text kabhi save
+  nahi hota, logs mein nahi aata. Random bearer token (30 din valid),
+  frontend localStorage mein rakhta hai. Galat password / unknown user
+  par aik hi generic error (no user enumeration).
+- **Credits:** TTS 1 credit per 100 characters (round up), Clone 10
+  credits per generation. Balance kam ho to **402** saaf message ke sath.
+  Generation fail ho to credits wapas (refund). "Get more credits"
+  button honestly Coming Soon kehta hai — koi real payment wired nahi hai.
+- **History:** login ke baad ki har TTS/Clone generation save hoti hai
+  (`GET /api/history`, play/download `GET /api/history/{id}/audio`,
+  `DELETE /api/history/{id}`). Audio `data/history/<user>/` mein save
+  hoti hai (gitignored). Sirf apni history dikhti hai.
+- **Saved voices:** clone ke baad "Save this voice" se awaz naam se save
+  hoti hai (`POST /api/voices/save`, reference `data/voices/<user>/`
+  mein). `GET /api/voices/saved`, `DELETE /api/voices/saved/{id}`.
+  Clone karte waqt saved voice chunein to dobara upload nahi karna parta
+  (`saved_voice_id` se clone, is VM par test pass).
+- **Frontend:** header mein credits pill + username + logout, auth card
+  (login/signup), History section (play/download/delete), My Voices
+  section, clone mein saved-voice picker + Save button. Bina login ke TTS
+  demo abhi bhi chalta hai — 5 generations per browser session, clearly
+  shown (frontend counter); cloning ke liye login zaroori hai.
+- **Demo account (is machine ki local DB par):** `demo` / `awaazai123`,
+  100 credits, khaali history. Ye sirf is VM ki `data/awaazai.db` mein
+  hai — fresh install par database khaali banta hai, wahan signup karein.
+
+### Tested (v0.3.0 server, this VM, temp test DB)
+- Signup 100 credits; duplicate signup → 400; wrong password → 401;
+  `/api/credits` bina token → 401; clone bina login → 401.
+- TTS logged in (150 chars) → cost 2, remaining 98, real WAV 674,860 bytes;
+  TTS logged out → 200 (demo). History mein 1 item, audio play → 200.
+- Save voice → 200, list → 1 voice. Clone with `saved_voice_id` → 200,
+  real WAV 180,524 bytes, remaining 88, `X-Cloned-Voice: Test Voice`.
+- Credits 0 par TTS → **402**. User2 ki history khaali, doosre user ki
+  history/voice delete → 404 (isolation pass). Own delete → 200.
+- Regression: `/api/health` → 200 (v0.3.0, cloning "ready"),
+  `/api/voices` → 54, landing `/` → 200.
+
+### Not yet
+- Urdu cloning (Fish Speech GPU test, Phase 2 — user ka faisla baaki),
+  dubbing/Studio, real payment.
+
 ## [0.2.2] — 2026-11-26
 
 Server start script — server start karke browser mein page khol deta hai.
