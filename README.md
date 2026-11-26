@@ -1,12 +1,12 @@
 # AwaazAI — Apni Awaz, Apna Platform
 
 ElevenLabs-style AI voice platform, apna brand, open-source engines.
-**v0.3.0 — GitHub: https://github.com/hamxa8769/awaazai**
+**v0.4.0 — GitHub: https://github.com/hamxa8769/awaazai**
 
 Version rule (Muuk jaisa): har release mein VERSION bump + git tag +
 CHANGELOG entry — bina tag ke koi release nahi.
 
-> **Honest status v0.3.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
+> **Honest status v0.4.0:** Text-to-Speech kaam karta hai (Kokoro-82M, 54 fixed
 > voices, CPU par). Voice cloning bhi **chal raha hai** (Qwen3-TTS 0.6B Base
 > via qwentts.cpp, CPU par) — user ki approval ke baad engine build hua aur
 > English clone test pass hua (30 second mein 5.44 s audio, neeche dekhein).
@@ -14,7 +14,11 @@ CHANGELOG entry — bina tag ke koi release nahi.
 > FAIL by design) — Urdu ka candidate Fish Speech S2 hai, Phase 2 mein.
 > **Naya v0.3.0: login, history, credits aur saved voices** — local SQLite
 > database, koi external service nahi, koi real payment nahi.
-> Dubbing aur Studio abhi nahi bane.
+> **Naya v0.4.0: Speech-to-Text (faster-whisper tiny, CPU), Dubbing aur
+> Studio** — dubbing same-language kaam karta hai; cross-language
+> translation ke liye argos-translate abhi installed nahi hai, is liye
+> us pair par 501 aata hai aur transcript phir bhi milta hai (credits
+> nahi kat te).
 
 ## Kya ban gaya hai (MVP scaffold)
 
@@ -27,7 +31,9 @@ CHANGELOG entry — bina tag ke koi release nahi.
 | `POST /api/tts` (text → WAV) | ✅ Done, verified with real sample |
 | `POST /api/clone` | ✅ Done — **engine runs, English clone tested** (Qwen3-TTS 0.6B Base, ~30 s per short clone on CPU) |
 | `GET /api/clone/status` | ✅ Done — engine state, languages, Urdu note |
-| Dubbing / Studio | ❌ Coming Soon (Phase 2) |
+| Dubbing (`POST /api/dub`) | ✅ Done v0.4.0 — STT + re-voice; same-language live, cross-language 501 (argos-translate not installed) |
+| Studio (`POST /api/studio`) | ✅ Done v0.4.0 — 5000 chars, chunked, chapters, aik WAV |
+| Speech-to-Text (`POST /api/stt`) | ✅ Done v0.4.0 — faster-whisper tiny, CPU, free |
 | Login / history / credits | ✅ Done v0.3.0 — local SQLite, 100 free credits, history, saved voices |
 | Server start script (`start.bat` / `./start.sh` / `python3 start.py`) | ✅ Done — server + browser khulta hai |
 
@@ -268,7 +274,11 @@ clone karna block hoga; generated audio par watermark/metadata rahegi.
    Clone 10, 402 on empty). Payment ("Get more credits") abhi Coming Soon.
 3. **Urdu cloning** — Qwen mein Urdu nahi hai; Fish Speech S2 GPU test
    Phase 2 mein (licence dobara check kar ke, user ka faisla baaki).
-4. **Dubbing + Studio** — Phase 2 (Whisper + translate + clone; project editor).
+4. **Dubbing + Studio — DONE in v0.4.0** — STT (faster-whisper tiny, CPU,
+   free), Dubbing (STT → translate → re-voice, login, 20 credits; same-language
+   live, cross-language 501 kyunki argos-translate abhi installed nahi hai),
+   Studio (5000 chars, sentence-boundary chunks, chapters, TTS rate).
+   Baaki: argos-translate pairs install karke cross-language dub kholna.
 5. **Public launch** — paid plans, API keys, GPU server (Phase 3).
 
 ## Full plan

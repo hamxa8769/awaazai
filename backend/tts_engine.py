@@ -109,8 +109,8 @@ def voice_lang(voice_id: str) -> str:
     return _LANG_BY_PREFIX.get(voice_id[0], ("en-us",))[0]
 
 
-def synthesize(text: str, voice: str = "af_heart", speed: float = 1.0) -> tuple[bytes, int]:
-    """Text -> (wav_bytes, sample_rate). Raises ValueError on bad input."""
+def synthesize_samples(text: str, voice: str = "af_heart", speed: float = 1.0) -> tuple:
+    """Text -> (samples, sample_rate). Shared by /api/tts and Studio."""
     text = (text or "").strip()
     if not text:
         raise ValueError("Text is empty.")
@@ -125,6 +125,12 @@ def synthesize(text: str, voice: str = "af_heart", speed: float = 1.0) -> tuple[
         samples, sample_rate = kokoro.create(
             text, voice=voice, speed=speed, lang=voice_lang(voice)
         )
+    return samples, sample_rate
+
+
+def synthesize(text: str, voice: str = "af_heart", speed: float = 1.0) -> tuple[bytes, int]:
+    """Text -> (wav_bytes, sample_rate). Raises ValueError on bad input."""
+    samples, sample_rate = synthesize_samples(text, voice, speed)
     buf = io.BytesIO()
     sf.write(buf, samples, sample_rate, format="WAV")
     return buf.getvalue(), sample_rate
