@@ -1,0 +1,11 @@
+# AwaazAI MVP — laptop-safe, CPU-only. No GPU required.
+# Python 3.11+ (tested on 3.12). Install: pip install -r requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.30
+kokoro-onnx>=0.4
+soundfile>=0.12
+onnxruntime>=1.19
+# NOTE: kokoro-onnx pulls onnxruntime. No torch, no CUDA, no GPU needed.
+# Model files (~338 MB) are NOT in pip — download them once into models/:
+#   kokoro-v1.0.onnx  +  voices-v1.0.bin
+#   from https://github.com/thewh1teagle/kokoro-onnx/releases (model-files-v1.0)
