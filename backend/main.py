@@ -48,9 +48,9 @@ from backend import accounts, clone_engine, stt_engine, studio, translate, tts_e
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
-app = FastAPI(title="AwaazAI", version="0.4.0")
+app = FastAPI(title="AwaazAI", version="0.4.1")
 
 
 def _wav_duration(wav_bytes: bytes) -> float | None:
